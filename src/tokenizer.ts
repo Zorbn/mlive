@@ -17,7 +17,7 @@ export const enum TokenKind {
     Dot,
 }
 
-export interface BasicToken {
+interface BasicToken {
     kind:
         | TokenKind.LeadingWhitespace
         | TokenKind.TrailingWhitespace
@@ -31,7 +31,7 @@ export interface BasicToken {
         | TokenKind.Dot;
 }
 
-export interface IdentifierToken {
+interface IdentifierToken {
     kind: TokenKind.Identifier;
     text: string;
 }

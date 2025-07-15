@@ -1,5 +1,5 @@
 import { MSyntaxError } from "./mSyntaxError.js";
-import { BasicToken, IdentifierToken, Token, TokenKind } from "./tokenizer.js";
+import { Token, TokenKind } from "./tokenizer.js";
 
 const enum AstNodeKind {
     TopLevel,
@@ -74,7 +74,14 @@ export type AstNode =
 interface ParsePosition {
     line: number;
     column: number;
+    nextUnparsedLine: number;
 }
+
+const moveToNextUnparsedLine = (position: ParsePosition) => {
+    position.column = 0;
+    position.line = position.nextUnparsedLine;
+    position.nextUnparsedLine += 1;
+};
 
 const getToken = (input: Token[][], position: ParsePosition) =>
     input[position.line][position.column];
@@ -104,19 +111,23 @@ const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
 };
 
 const matchWhitespace = (input: Token[][], position: ParsePosition): boolean => {
-    const token = getToken(input, position);
-
-    if (
-        token.kind !== TokenKind.Space &&
-        token.kind !== TokenKind.TrailingWhitespace &&
-        token.kind !== TokenKind.LeadingWhitespace
-    ) {
+    if (!getWhitespace(input, position)) {
         return false;
     }
 
     nextToken(input, position);
 
     return true;
+};
+
+const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
+    const token = getToken(input, position);
+
+    return (
+        token.kind === TokenKind.Space ||
+        token.kind === TokenKind.TrailingWhitespace ||
+        token.kind === TokenKind.LeadingWhitespace
+    );
 };
 
 const reportError = (errors: MSyntaxError[], message: string, position: ParsePosition) => {
@@ -167,6 +178,63 @@ const parseExpression = (
     return node;
 };
 
+const parseBlock = (
+    input: Token[][],
+    position: ParsePosition,
+    errors: MSyntaxError[],
+    // The number of dots before each line (in addition to leading whitespace).
+    indentationLevel: number,
+    startOnNextLine: boolean,
+): CommandAstNode[] => {
+    const commands: CommandAstNode[] = [];
+
+    while (true) {
+        while (
+            position.line < input.length &&
+            (startOnNextLine || getToken(input, position).kind === TokenKind.TrailingWhitespace)
+        ) {
+            moveToNextUnparsedLine(position);
+            startOnNextLine = false;
+
+            if (position.line >= input.length) {
+                return commands;
+            }
+
+            const startColumn = position.column;
+
+            let didBlockEnd = !matchToken(input, position, TokenKind.LeadingWhitespace);
+
+            if (!didBlockEnd) {
+                for (let i = 0; i < indentationLevel; i++) {
+                    if (!matchToken(input, position, TokenKind.Dot)) {
+                        didBlockEnd = true;
+                        break;
+                    }
+
+                    if (!matchToken(input, position, TokenKind.Space)) {
+                        reportError(errors, "Expected space after dot", position);
+                    }
+                }
+            }
+
+            if (didBlockEnd) {
+                position.column = startColumn;
+                return commands;
+            }
+        }
+
+        const command = parseCommand(input, position, errors, indentationLevel);
+
+        if (!command) {
+            break;
+        }
+
+        commands.push(command);
+    }
+
+    return commands;
+};
+
 const parseWriteBody = (
     input: Token[][],
     position: ParsePosition,
@@ -176,7 +244,7 @@ const parseWriteBody = (
 
     const args: ExpressionAstNode[] = [];
 
-    if (matchWhitespace(input, position)) {
+    if (getWhitespace(input, position)) {
         return {
             kind: AstNodeKind.Write,
             args,
@@ -208,7 +276,7 @@ const parseQuitBody = (
     position: ParsePosition,
     errors: MSyntaxError[],
 ): QuitAstNode | undefined => {
-    if (matchWhitespace(input, position)) {
+    if (getWhitespace(input, position)) {
         return {
             kind: AstNodeKind.Quit,
         };
@@ -224,15 +292,34 @@ const parseDoBlockBody = (
     input: Token[][],
     position: ParsePosition,
     errors: MSyntaxError[],
+    indentationLevel: number,
 ): DoBlockAstNode | undefined => {
-    throw "Do block parsing is unimplemented";
-    return;
+    if (!getWhitespace(input, position)) {
+        // TODO: If there are arguments the "do" command should not be interpreted as a block in the first place.
+        reportError(errors, "Expected no arguments for do block", position);
+        return;
+    }
+
+    const startLine = position.line;
+    const startColumn = position.column;
+
+    const children = parseBlock(input, position, errors, indentationLevel + 1, true);
+
+    position.nextUnparsedLine = position.line;
+    position.line = startLine;
+    position.column = startColumn;
+
+    return {
+        kind: AstNodeKind.DoBlock,
+        children,
+    };
 };
 
 const parseCommand = (
     input: Token[][],
     position: ParsePosition,
     errors: MSyntaxError[],
+    indentationLevel: number,
 ): CommandAstNode | undefined => {
     let nameToken = matchToken(input, position, TokenKind.Identifier);
 
@@ -260,40 +347,18 @@ const parseCommand = (
         case "d":
         case "do":
             // TODO: This could also be a subroutine call instead of a block.
-            node = parseDoBlockBody(input, position, errors);
+            node = parseDoBlockBody(input, position, errors, indentationLevel);
             break;
         default:
             reportError(errors, "Unrecognized command name", position);
             return;
     }
 
+    if (!matchWhitespace(input, position)) {
+        reportError(errors, "Expected space between arguments and next commands", position);
+    }
+
     return node;
-
-    // const args: ExpressionAstNode[] = [];
-
-    // if (getToken(input, position).kind !== TokenKind.Space) {
-    //     while (true) {
-    //         if (!matchToken(input, position, TokenKind.Identifier)) {
-    //         }
-    //     }
-    // }
-
-    // const token = getToken(input, position);
-
-    // if (token.kind === TokenKind.TrailingWhitespace || token.kind === TokenKind.Space) {
-    //     nextToken(input, position);
-    // } else {
-    //     reportError(errors, "Expected space after command", position);
-    // }
-
-    // return {
-    //     kind: AstNodeKind.Command,
-    //     name: {
-    //         kind: AstNodeKind.Identifier,
-    //         text: nameToken.text,
-    //     },
-    //     args,
-    // };
 };
 
 const parseTag = (
@@ -344,44 +409,22 @@ const parseTag = (
 
     if (!matchWhitespace(input, position)) {
         reportError(errors, "Expected space after tag name", position);
+        return;
     }
 
-    const children: CommandAstNode[] = [];
+    const children = parseBlock(input, position, errors, 0, false);
 
-    while (true) {
-        while (
-            position.line < input.length &&
-            getToken(input, position).kind === TokenKind.TrailingWhitespace
-        ) {
-            position.column = 0;
-            position.line += 1;
-        }
-
-        if (
-            position.line >= input.length ||
-            !matchToken(input, position, TokenKind.LeadingWhitespace)
-        ) {
-            return {
-                name,
-                kind: AstNodeKind.Tag,
-                children,
-                params,
-            };
-        }
-
-        const command = parseCommand(input, position, errors);
-
-        if (!command) {
-            break;
-        }
-
-        children.push(command);
-    }
+    return {
+        name,
+        kind: AstNodeKind.Tag,
+        children,
+        params,
+    };
 };
 
 export const parse = (input: Token[][]) => {
     const errors: MSyntaxError[] = [];
-    const position = { line: 0, column: 0 };
+    const position = { line: 0, column: 0, nextUnparsedLine: 1 };
     const ast: TopLevelAstNode = {
         kind: AstNodeKind.TopLevel,
         children: [],

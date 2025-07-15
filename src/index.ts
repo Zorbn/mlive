@@ -41,7 +41,11 @@ SCRIPT
 
 main
     wRIte "Hello, world"
-    w "Result of my function is: "
+    w "Result of my function is: " d
+    . d  w "In the block 1"
+    . . w "In the inner block 1"
+    . . w "In the inner block 2"
+    . w "In the block 2","Still in the block"
     q
 
 myFunction()
