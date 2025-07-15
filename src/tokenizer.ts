@@ -77,7 +77,7 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
         });
     }
 
-    for (; x < input.length; x++) {
+    while (x < input.length) {
         const firstChar = input[x];
 
         if (isAlphabetic(firstChar)) {
@@ -122,7 +122,7 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
                 x++;
 
                 // TODO: Handle "" for a literal quote.
-                while (x < input.length && input[x] != '"') {
+                while (x < input.length && input[x] !== '"') {
                     x++;
                 }
 
@@ -133,7 +133,7 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
 
                 x++;
 
-                break;
+                continue;
             }
             case " ":
                 tokens.push({
@@ -181,8 +181,10 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
                     line: y,
                     column: x,
                 });
-                continue;
+                break;
         }
+
+        x++;
     }
 
     tokens.push({

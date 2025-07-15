@@ -3,12 +3,12 @@ import { MSyntaxError } from "./mSyntaxError.js";
 import { parse } from "./parser.js";
 
 const handleErrors = (errors: MSyntaxError[]) => {
-    if (errors.length == 0) {
+    if (errors.length === 0) {
         return false;
     }
 
     for (const error of errors) {
-        console.log(`Syntax error at ${error.line}:${error.column}: ${error.message}`);
+        console.log(`Syntax error at ${error.line + 1}:${error.column + 1}: ${error.message}`);
     }
 
     return true;
@@ -32,7 +32,25 @@ const evaluate = (script: string) => {
     console.log(parseResult.ast);
 };
 
-evaluate(`
+document.getElementById("evaluateButton")?.addEventListener("click", () => {
+    evaluate(`
+    write "hi"
+
+SCRIPT
+    QUIT
+
+main
+    wRIte "Hello, world"
+    w "Result of my function is: "
+    q
+
+myFunction()
+    q 777
+    `);
+});
+
+/*
+`
     write "hi"
 
 SCRIPT
@@ -45,4 +63,5 @@ main n aVar
 
 myFunction()
     q 777
-`);
+    `
+*/

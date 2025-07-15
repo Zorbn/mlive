@@ -82,7 +82,7 @@ const getToken = (input: Token[][], position: ParsePosition) =>
 const nextToken = (input: Token[][], position: ParsePosition) => {
     const token = getToken(input, position);
 
-    if (token.kind != TokenKind.TrailingWhitespace) {
+    if (token.kind !== TokenKind.TrailingWhitespace) {
         position.column += 1;
     }
 
@@ -96,19 +96,75 @@ const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
 ): T | undefined => {
     const token = getToken(input, position);
 
-    if (token.kind != validKind) {
+    if (token.kind !== validKind) {
         return;
     }
 
     return nextToken(input, position) as T;
 };
 
+const matchWhitespace = (input: Token[][], position: ParsePosition): boolean => {
+    const token = getToken(input, position);
+
+    if (
+        token.kind !== TokenKind.Space &&
+        token.kind !== TokenKind.TrailingWhitespace &&
+        token.kind !== TokenKind.LeadingWhitespace
+    ) {
+        return false;
+    }
+
+    nextToken(input, position);
+
+    return true;
+};
+
 const reportError = (errors: MSyntaxError[], message: string, position: ParsePosition) => {
+    console.log(message, position);
     errors.push({
         message,
         line: position.line,
+        // TODO: The column here is actually the index of the token. We should store the real column of each token so it can be reported here.
         column: position.column,
     });
+};
+
+const parseExpression = (
+    input: Token[][],
+    position: ParsePosition,
+    errors: MSyntaxError[],
+): ExpressionAstNode | undefined => {
+    const token = getToken(input, position);
+
+    let node: ExpressionAstNode | undefined;
+
+    switch (token.kind) {
+        case TokenKind.String:
+            node = {
+                kind: AstNodeKind.StringLiteral,
+                value: token.value,
+            };
+            break;
+        case TokenKind.Number:
+            node = {
+                kind: AstNodeKind.NumberLiteral,
+                value: token.value,
+            };
+            break;
+        case TokenKind.Identifier:
+            node = {
+                kind: AstNodeKind.Identifier,
+                text: token.text,
+            };
+            break;
+        default:
+            reportError(errors, "Expected an expression", position);
+            return;
+    }
+
+    nextToken(input, position);
+
+    return node;
 };
 
 const parseWriteBody = (
@@ -120,7 +176,7 @@ const parseWriteBody = (
 
     const args: ExpressionAstNode[] = [];
 
-    if (matchToken(input, position, TokenKind.Space)) {
+    if (matchWhitespace(input, position)) {
         return {
             kind: AstNodeKind.Write,
             args,
@@ -128,6 +184,14 @@ const parseWriteBody = (
     }
 
     while (true) {
+        const expression = parseExpression(input, position, errors);
+
+        if (!expression) {
+            break;
+        }
+
+        args.push(expression);
+
         if (!matchToken(input, position, TokenKind.Comma)) {
             break;
         }
@@ -144,7 +208,16 @@ const parseQuitBody = (
     position: ParsePosition,
     errors: MSyntaxError[],
 ): QuitAstNode | undefined => {
-    return;
+    if (matchWhitespace(input, position)) {
+        return {
+            kind: AstNodeKind.Quit,
+        };
+    }
+
+    return {
+        kind: AstNodeKind.Quit,
+        returnValue: parseExpression(input, position, errors),
+    };
 };
 
 const parseDoBlockBody = (
@@ -168,9 +241,8 @@ const parseCommand = (
         return;
     }
 
-    if (!matchToken(input, position, TokenKind.Space)) {
-        reportError(errors, "Expected space after command", position);
-        return;
+    if (!matchWhitespace(input, position)) {
+        reportError(errors, "Expected space between command and arguments", position);
     }
 
     let node: CommandAstNode | undefined;
@@ -195,18 +267,11 @@ const parseCommand = (
             return;
     }
 
-    if (
-        !matchToken(input, position, TokenKind.TrailingWhitespace) &&
-        !matchToken(input, position, TokenKind.Space)
-    ) {
-        reportError(errors, "Expected commands to be separated by a space", position);
-    }
-
     return node;
 
     // const args: ExpressionAstNode[] = [];
 
-    // if (getToken(input, position).kind != TokenKind.Space) {
+    // if (getToken(input, position).kind !== TokenKind.Space) {
     //     while (true) {
     //         if (!matchToken(input, position, TokenKind.Identifier)) {
     //         }
@@ -215,7 +280,7 @@ const parseCommand = (
 
     // const token = getToken(input, position);
 
-    // if (token.kind == TokenKind.TrailingWhitespace || token.kind == TokenKind.Space) {
+    // if (token.kind === TokenKind.TrailingWhitespace || token.kind === TokenKind.Space) {
     //     nextToken(input, position);
     // } else {
     //     reportError(errors, "Expected space after command", position);
@@ -237,68 +302,80 @@ const parseTag = (
     errors: MSyntaxError[],
 ): TagAstNode | undefined => {
     let name = "";
-    let parameters: IdentifierAstNode[] | undefined;
+    let params: IdentifierAstNode[] | undefined;
 
     const firstToken = getToken(input, position);
 
-    if (firstToken.kind == TokenKind.Identifier) {
+    if (firstToken.kind === TokenKind.Identifier) {
         name = firstToken.text;
         nextToken(input, position);
 
-        if (getToken(input, position).kind == TokenKind.LeftParen) {
+        if (getToken(input, position).kind === TokenKind.LeftParen) {
             nextToken(input, position);
 
-            parameters = [];
+            params = [];
 
-            while (true) {
-                let parameterToken = matchToken(input, position, TokenKind.Identifier);
+            for (let i = 0; ; i++) {
+                let paramToken = matchToken(input, position, TokenKind.Identifier);
 
-                if (!parameterToken) {
-                    reportError(errors, "Expected parameter name", position);
+                if (!paramToken) {
+                    if (i > 0) {
+                        reportError(errors, "Expected parameter name", position);
+                    }
+
                     break;
                 }
 
-                parameters.push({
+                params.push({
                     kind: AstNodeKind.Identifier,
-                    text: parameterToken.text,
+                    text: paramToken.text,
                 });
 
-                if (nextToken(input, position).kind != TokenKind.Comma) {
+                if (nextToken(input, position).kind !== TokenKind.Comma) {
                     break;
                 }
             }
 
-            if (nextToken(input, position).kind == TokenKind.RightParen) {
+            if (!matchToken(input, position, TokenKind.RightParen)) {
                 reportError(errors, "Unterminated parameter list", position);
             }
         }
     }
 
-    if (!matchToken(input, position, TokenKind.LeadingWhitespace)) {
-        reportError(errors, "Expected tag name or indentation", position);
-        return;
+    if (!matchWhitespace(input, position)) {
+        reportError(errors, "Expected space after tag name", position);
     }
 
     const children: CommandAstNode[] = [];
 
     while (true) {
-        if (getToken(input, position).kind == TokenKind.TrailingWhitespace) {
+        while (
+            position.line < input.length &&
+            getToken(input, position).kind === TokenKind.TrailingWhitespace
+        ) {
+            position.column = 0;
             position.line += 1;
-
-            if (
-                position.line > input.length ||
-                !matchToken(input, position, TokenKind.LeadingWhitespace)
-            ) {
-                return {
-                    name,
-                    kind: AstNodeKind.Tag,
-                    children,
-                    params: parameters,
-                };
-            }
         }
 
-        parseCommand(input, position, errors);
+        if (
+            position.line >= input.length ||
+            !matchToken(input, position, TokenKind.LeadingWhitespace)
+        ) {
+            return {
+                name,
+                kind: AstNodeKind.Tag,
+                children,
+                params,
+            };
+        }
+
+        const command = parseCommand(input, position, errors);
+
+        if (!command) {
+            break;
+        }
+
+        children.push(command);
     }
 };
 
@@ -313,9 +390,11 @@ export const parse = (input: Token[][]) => {
     while (position.line < input.length) {
         const tag = parseTag(input, position, errors);
 
-        if (tag) {
-            ast.children.push(tag);
+        if (!tag) {
+            break;
         }
+
+        ast.children.push(tag);
     }
 
     return {
