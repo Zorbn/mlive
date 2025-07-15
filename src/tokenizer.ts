@@ -1,8 +1,9 @@
-import { SyntaxError } from "./syntaxError.js";
+import { MSyntaxError } from "./mSyntaxError.js";
 
-const enum TokenKind {
+export const enum TokenKind {
     // No leading whitespace on a line indicates the first identifier is a tag name.
     LeadingWhitespace,
+    TrailingWhitespace,
     Space,
     Identifier,
     Number,
@@ -16,9 +17,10 @@ const enum TokenKind {
     Dot,
 }
 
-interface BasicToken {
+export interface BasicToken {
     kind:
         | TokenKind.LeadingWhitespace
+        | TokenKind.TrailingWhitespace
         | TokenKind.Space
         | TokenKind.LeftParen
         | TokenKind.RightParen
@@ -29,7 +31,7 @@ interface BasicToken {
         | TokenKind.Dot;
 }
 
-interface IdentifierToken {
+export interface IdentifierToken {
     kind: TokenKind.Identifier;
     text: string;
 }
@@ -60,7 +62,9 @@ const isDigit = (char: string) => {
     return charCode >= 48 && charCode <= 57;
 };
 
-const tokenizeLine = (input: string, y: number, errors: SyntaxError[]): Token[] => {
+const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[] => {
+    input = input.trimEnd();
+
     const tokens: Token[] = [];
 
     let x = 0;
@@ -181,11 +185,15 @@ const tokenizeLine = (input: string, y: number, errors: SyntaxError[]): Token[] 
         }
     }
 
+    tokens.push({
+        kind: TokenKind.TrailingWhitespace,
+    });
+
     return tokens;
 };
 
 export const tokenize = (input: string) => {
-    const errors: SyntaxError[] = [];
+    const errors: MSyntaxError[] = [];
     const lines = input.split(/\r?\n/);
     const tokenizedLines = [];
 
