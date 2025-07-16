@@ -1,4 +1,4 @@
-import { MSyntaxError } from "./mSyntaxError.js";
+import { MError } from "./mError.js";
 
 export const enum TokenKind {
     // No leading whitespace on a line indicates the first identifier is a tag name.
@@ -62,7 +62,7 @@ const isDigit = (char: string) => {
     return charCode >= 48 && charCode <= 57;
 };
 
-const tokenizeLine = (line: string, y: number, errors: MSyntaxError[]): Token[] => {
+const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
     line = line.trimEnd();
 
     const tokens: Token[] = [];
@@ -195,7 +195,7 @@ const tokenizeLine = (line: string, y: number, errors: MSyntaxError[]): Token[] 
 };
 
 export const tokenize = (code: string) => {
-    const errors: MSyntaxError[] = [];
+    const errors: MError[] = [];
     const lines = code.split(/\r?\n/);
     const tokenizedLines = [];
 

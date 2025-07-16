@@ -1,14 +1,14 @@
 import { tokenize } from "./tokenizer.js";
-import { MSyntaxError } from "./mSyntaxError.js";
+import { MError } from "./mError.js";
 import { interpret } from "./interpreter.js";
 
-const handleErrors = (errors: MSyntaxError[]) => {
+const handleErrors = (errors: MError[]) => {
     if (errors.length === 0) {
         return false;
     }
 
     for (const error of errors) {
-        console.log(`Syntax error at ${error.line + 1}:${error.column + 1}: ${error.message}`);
+        console.log(`Error at ${error.line + 1}:${error.column + 1}: ${error.message}`);
     }
 
     return true;

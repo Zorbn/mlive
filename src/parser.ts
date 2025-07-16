@@ -1,4 +1,4 @@
-import { MSyntaxError } from "./mSyntaxError.js";
+import { MError } from "./mError.js";
 import { Token, TokenKind } from "./tokenizer.js";
 
 // TODO: Most important/unique things to parse right now:
@@ -137,7 +137,7 @@ const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
     );
 };
 
-const reportError = (errors: MSyntaxError[], message: string, position: ParsePosition) => {
+const reportError = (errors: MError[], message: string, position: ParsePosition) => {
     console.log(message, position);
     errors.push({
         message,
@@ -150,7 +150,7 @@ const reportError = (errors: MSyntaxError[], message: string, position: ParsePos
 const parseExpression = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): ExpressionAstNode | undefined => {
     const token = getToken(input, position);
 
@@ -188,7 +188,7 @@ const parseExpression = (
 const parseBlock = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number,
     startOnNextLine: boolean,
@@ -245,7 +245,7 @@ const parseBlock = (
 const parseWriteBody = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): WriteAstNode | undefined => {
     // TODO: Support formatting with #, ?, and !.
 
@@ -281,7 +281,7 @@ const parseWriteBody = (
 const parseQuitBody = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): QuitAstNode | undefined => {
     if (getWhitespace(input, position)) {
         return {
@@ -298,7 +298,7 @@ const parseQuitBody = (
 const parseDoBlockBody = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     indentationLevel: number,
 ): DoBlockAstNode | undefined => {
     if (!getWhitespace(input, position)) {
@@ -325,7 +325,7 @@ const parseDoBlockBody = (
 const parseCommand = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     indentationLevel: number,
 ): CommandAstNode | undefined => {
     let nameToken = matchToken(input, position, TokenKind.Identifier);
@@ -371,7 +371,7 @@ const parseCommand = (
 const parseTag = (
     input: Token[][],
     position: ParsePosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): TagAstNode | undefined => {
     let name = "";
     let params: IdentifierAstNode[] | undefined;
@@ -430,7 +430,7 @@ const parseTag = (
 };
 
 export const parse = (input: Token[][]) => {
-    const errors: MSyntaxError[] = [];
+    const errors: MError[] = [];
     const position = { line: 0, column: 0, nextUnparsedLine: 1 };
     const ast: TopLevelAstNode = {
         kind: AstNodeKind.TopLevel,

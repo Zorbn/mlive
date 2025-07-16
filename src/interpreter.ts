@@ -1,4 +1,4 @@
-import { MSyntaxError } from "./mSyntaxError.js";
+import { MError } from "./mError.js";
 import { Token, TokenKind } from "./tokenizer.js";
 
 // TODO: Most important/unique things to interpret right now:
@@ -69,7 +69,7 @@ const getWhitespace = (input: Token[][], position: InterpreterPosition): boolean
     );
 };
 
-const reportError = (errors: MSyntaxError[], message: string, position: InterpreterPosition) => {
+const reportError = (errors: MError[], message: string, position: InterpreterPosition) => {
     console.log(message, position);
     errors.push({
         message,
@@ -82,7 +82,7 @@ const reportError = (errors: MSyntaxError[], message: string, position: Interpre
 const interpretExpression = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): MValue | undefined => {
     const token = getToken(input, position);
 
@@ -111,7 +111,7 @@ const interpretExpression = (
 const interpretBlock = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number,
     startOnNextLine: boolean,
@@ -161,7 +161,7 @@ const interpretBlock = (
 const interpretWriteBody = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): boolean => {
     // TODO: Support formatting with #, ?, and !.
 
@@ -192,7 +192,7 @@ const interpretWriteBody = (
 const interpretQuitBody = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): MValue | null | undefined => {
     if (getWhitespace(input, position)) {
         return null;
@@ -206,7 +206,7 @@ const interpretQuitBody = (
 const interpretDoBlockBody = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     indentationLevel: number,
 ): boolean => {
     if (!getWhitespace(input, position)) {
@@ -232,7 +232,7 @@ const interpretDoBlockBody = (
 const interpretCommand = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
     indentationLevel: number,
 ): boolean => {
     let nameToken = matchToken(input, position, TokenKind.Identifier);
@@ -284,7 +284,7 @@ const interpretCommand = (
 const interpretTag = (
     input: Token[][],
     position: InterpreterPosition,
-    errors: MSyntaxError[],
+    errors: MError[],
 ): string[] | null | undefined => {
     let name = "";
     let params: string[] | null = null;
@@ -338,7 +338,7 @@ const interpretTag = (
 
 export const interpret = (input: Token[][]) => {
     // TODO: First do a pass to collect the tags that are available to be called.
-    const errors: MSyntaxError[] = [];
+    const errors: MError[] = [];
     const position = { line: 0, column: 0, nextUninterpretedLine: 1 };
 
     while (position.line < input.length) {
