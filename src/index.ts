@@ -1,6 +1,6 @@
 import { tokenize } from "./tokenizer.js";
 import { MSyntaxError } from "./mSyntaxError.js";
-import { parse } from "./parser.js";
+import { interpret } from "./interpreter.js";
 
 const handleErrors = (errors: MSyntaxError[]) => {
     if (errors.length === 0) {
@@ -23,13 +23,13 @@ const evaluate = (script: string) => {
 
     console.log(tokenizeResult.tokenizedLines);
 
-    const parseResult = parse(tokenizeResult.tokenizedLines);
+    const interpretResult = interpret(tokenizeResult.tokenizedLines);
 
-    if (handleErrors(parseResult.errors)) {
+    if (handleErrors(interpretResult.errors)) {
         return;
     }
 
-    console.log(parseResult.ast);
+    console.log("Evaluation completed successfully!");
 };
 
 document.getElementById("evaluateButton")?.addEventListener("click", () => {

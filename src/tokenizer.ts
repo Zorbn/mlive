@@ -62,14 +62,14 @@ const isDigit = (char: string) => {
     return charCode >= 48 && charCode <= 57;
 };
 
-const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[] => {
-    input = input.trimEnd();
+const tokenizeLine = (line: string, y: number, errors: MSyntaxError[]): Token[] => {
+    line = line.trimEnd();
 
     const tokens: Token[] = [];
 
     let x = 0;
 
-    for (; x < input.length, isWhitespace(input[x]); x++);
+    for (; x < line.length, isWhitespace(line[x]); x++);
 
     if (x > 0) {
         tokens.push({
@@ -77,21 +77,21 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
         });
     }
 
-    while (x < input.length) {
-        const firstChar = input[x];
+    while (x < line.length) {
+        const firstChar = line[x];
 
         if (isAlphabetic(firstChar)) {
             const start = x;
 
             x++;
 
-            while (x < input.length && isAlphabetic(input[x])) {
+            while (x < line.length && isAlphabetic(line[x])) {
                 x++;
             }
 
             tokens.push({
                 kind: TokenKind.Identifier,
-                text: input.slice(start, x),
+                text: line.slice(start, x),
             });
 
             continue;
@@ -103,13 +103,13 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
             x++;
 
             // TODO: Handle decimals.
-            while (x < input.length && isDigit(input[x])) {
+            while (x < line.length && isDigit(line[x])) {
                 x++;
             }
 
             tokens.push({
                 kind: TokenKind.Number,
-                value: Number.parseInt(input.slice(start, x)),
+                value: Number.parseInt(line.slice(start, x)),
             });
 
             continue;
@@ -122,13 +122,13 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
                 x++;
 
                 // TODO: Handle "" for a literal quote.
-                while (x < input.length && input[x] !== '"') {
+                while (x < line.length && line[x] !== '"') {
                     x++;
                 }
 
                 tokens.push({
                     kind: TokenKind.String,
-                    value: input.slice(start + 1, x),
+                    value: line.slice(start + 1, x),
                 });
 
                 x++;
@@ -194,9 +194,9 @@ const tokenizeLine = (input: string, y: number, errors: MSyntaxError[]): Token[]
     return tokens;
 };
 
-export const tokenize = (input: string) => {
+export const tokenize = (code: string) => {
     const errors: MSyntaxError[] = [];
-    const lines = input.split(/\r?\n/);
+    const lines = code.split(/\r?\n/);
     const tokenizedLines = [];
 
     for (let y = 0; y < lines.length; y++) {

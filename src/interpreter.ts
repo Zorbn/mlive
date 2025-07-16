@@ -1,99 +1,31 @@
 import { MSyntaxError } from "./mSyntaxError.js";
 import { Token, TokenKind } from "./tokenizer.js";
 
-// TODO: Most important/unique things to parse right now:
+// TODO: Most important/unique things to interpret right now:
 // if: controls the whole rest of the line like for,
 // unary/binary ops: simple precedence (unary ops before binary ops, left to right),
 // negation of operators: '< means >=,
 // builtins like $O: $O(array("subscript")),
 // function calls and subroutine do calls: mostly just useful to make more useful examples when we start interpreting code,
 
-export const enum AstNodeKind {
-    TopLevel,
-    Tag,
-    Write,
-    Quit,
-    DoBlock,
-    Identifier,
-    NumberLiteral,
-    StringLiteral,
-}
+type MValue = string | number;
 
-export interface TopLevelAstNode {
-    kind: AstNodeKind.TopLevel;
-    children: TagAstNode[];
-}
-
-export interface TagAstNode {
-    kind: AstNodeKind.Tag;
-    // Any commands that occur before explicit tag definitions
-    // are put in an implicit tag with the name "".
-    name: string;
-    children: CommandAstNode[];
-    // Tags with an empty parameter list are called differently from tags with no parameter list.
-    params?: IdentifierAstNode[];
-}
-
-export interface WriteAstNode {
-    kind: AstNodeKind.Write;
-    args: ExpressionAstNode[];
-}
-
-export interface QuitAstNode {
-    kind: AstNodeKind.Quit;
-    returnValue?: ExpressionAstNode;
-}
-
-export interface DoBlockAstNode {
-    kind: AstNodeKind.DoBlock;
-    children: CommandAstNode[];
-}
-
-export type CommandAstNode = WriteAstNode | QuitAstNode | DoBlockAstNode;
-
-export type ExpressionAstNode = IdentifierAstNode | NumberLiteralAstNode | StringLiteralAstNode;
-
-export interface IdentifierAstNode {
-    kind: AstNodeKind.Identifier;
-    text: string;
-}
-
-export interface NumberLiteralAstNode {
-    kind: AstNodeKind.NumberLiteral;
-    value: number;
-}
-
-export interface StringLiteralAstNode {
-    kind: AstNodeKind.StringLiteral;
-    value: string;
-}
-
-export type AstNode =
-    | TopLevelAstNode
-    | TagAstNode
-    | CommandAstNode
-    | DoBlockAstNode
-    | ExpressionAstNode
-    | IdentifierAstNode
-    | NumberLiteralAstNode
-    | StringLiteralAstNode;
-
-interface ParsePosition {
+interface InterpreterPosition {
     line: number;
     column: number;
-    nextUnparsedLine: number;
+    nextUninterpretedLine: number;
 }
 
-const moveToNextUnparsedLine = (position: ParsePosition) => {
+const moveToNextUninterpretedLine = (position: InterpreterPosition) => {
     position.column = 0;
-    position.line = position.nextUnparsedLine;
-    position.nextUnparsedLine += 1;
+    position.line = position.nextUninterpretedLine;
+    position.nextUninterpretedLine += 1;
 };
 
-const getToken = (input: Token[][], position: ParsePosition) =>
+const getToken = (input: Token[][], position: InterpreterPosition) =>
     input[position.line][position.column];
 
-const nextToken = (input: Token[][], position: ParsePosition) => {
+const nextToken = (input: Token[][], position: InterpreterPosition) => {
     const token = getToken(input, position);
 
     if (token.kind !== TokenKind.TrailingWhitespace) {
@@ -105,7 +37,7 @@ const nextToken = (input: Token[][], position: ParsePosition) => {
 
 const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     validKind: K,
 ): T | undefined => {
     const token = getToken(input, position);
@@ -117,7 +49,7 @@ const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
     return nextToken(input, position) as T;
 };
 
-const matchWhitespace = (input: Token[][], position: ParsePosition): boolean => {
+const matchWhitespace = (input: Token[][], position: InterpreterPosition): boolean => {
     if (!getWhitespace(input, position)) {
         return false;
     }
@@ -127,7 +59,7 @@ const matchWhitespace = (input: Token[][], position: ParsePosition): boolean => 
     return true;
 };
 
-const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
+const getWhitespace = (input: Token[][], position: InterpreterPosition): boolean => {
     const token = getToken(input, position);
 
     return (
@@ -137,7 +69,7 @@ const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
     );
 };
 
-const reportError = (errors: MSyntaxError[], message: string, position: ParsePosition) => {
+const reportError = (errors: MSyntaxError[], message: string, position: InterpreterPosition) => {
     console.log(message, position);
     errors.push({
         message,
@@ -147,33 +79,24 @@ const reportError = (errors: MSyntaxError[], message: string, position: ParsePos
     });
 };
 
-const parseExpression = (
+const interpretExpression = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
-): ExpressionAstNode | undefined => {
+): MValue | undefined => {
     const token = getToken(input, position);
 
-    let node: ExpressionAstNode | undefined;
+    let value: MValue;
 
     switch (token.kind) {
         case TokenKind.String:
-            node = {
-                kind: AstNodeKind.StringLiteral,
-                value: token.value,
-            };
+            value = token.value;
             break;
         case TokenKind.Number:
-            node = {
-                kind: AstNodeKind.NumberLiteral,
-                value: token.value,
-            };
+            value = token.value;
             break;
         case TokenKind.Identifier:
-            node = {
-                kind: AstNodeKind.Identifier,
-                text: token.text,
-            };
+            value = token.text;
             break;
         default:
             reportError(errors, "Expected an expression", position);
@@ -182,29 +105,27 @@ const parseExpression = (
 
     nextToken(input, position);
 
-    return node;
+    return value;
 };
 
-const parseBlock = (
+const interpretBlock = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number,
     startOnNextLine: boolean,
-): CommandAstNode[] => {
-    const commands: CommandAstNode[] = [];
-
+): boolean => {
     while (true) {
         while (
             position.line < input.length &&
             (startOnNextLine || getToken(input, position).kind === TokenKind.TrailingWhitespace)
         ) {
-            moveToNextUnparsedLine(position);
+            moveToNextUninterpretedLine(position);
             startOnNextLine = false;
 
             if (position.line >= input.length) {
-                return commands;
+                return true;
             }
 
             const startColumn = position.column;
@@ -220,161 +141,153 @@ const parseBlock = (
 
                     if (!matchToken(input, position, TokenKind.Space)) {
                         reportError(errors, "Expected space after dot", position);
+                        return false;
                     }
                 }
             }
 
             if (didBlockEnd) {
                 position.column = startColumn;
-                return commands;
+                return true;
             }
         }
 
-        const command = parseCommand(input, position, errors, indentationLevel);
-
-        if (!command) {
-            break;
+        if (!interpretCommand(input, position, errors, indentationLevel)) {
+            return false;
         }
-
-        commands.push(command);
     }
-
-    return commands;
 };
 
-const parseWriteBody = (
+const interpretWriteBody = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
-): WriteAstNode | undefined => {
+): boolean => {
     // TODO: Support formatting with #, ?, and !.
 
-    const args: ExpressionAstNode[] = [];
-
     if (getWhitespace(input, position)) {
-        return {
-            kind: AstNodeKind.Write,
-            args,
-        };
+        return true;
     }
 
     while (true) {
-        const expression = parseExpression(input, position, errors);
+        const expression = interpretExpression(input, position, errors);
 
         if (!expression) {
             break;
         }
 
-        args.push(expression);
+        // TODO: This isn't how printing should be handled, output should be a string
+        // that goes to an output element instead of the console. Also, expression values
+        // should be printed in a way that matches M. Also, there should be no implicit newline.
+        console.log(expression);
 
         if (!matchToken(input, position, TokenKind.Comma)) {
             break;
         }
     }
 
-    return {
-        kind: AstNodeKind.Write,
-        args,
-    };
+    return true;
 };
 
-const parseQuitBody = (
+const interpretQuitBody = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
-): QuitAstNode | undefined => {
+): MValue | null | undefined => {
     if (getWhitespace(input, position)) {
-        return {
-            kind: AstNodeKind.Quit,
-        };
+        return null;
     }
 
-    return {
-        kind: AstNodeKind.Quit,
-        returnValue: parseExpression(input, position, errors),
-    };
+    // TODO: Actually do the quitting part of quit.
+
+    return interpretExpression(input, position, errors);
 };
 
-const parseDoBlockBody = (
+const interpretDoBlockBody = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
     indentationLevel: number,
-): DoBlockAstNode | undefined => {
+): boolean => {
     if (!getWhitespace(input, position)) {
         // TODO: If there are arguments the "do" command should not be interpreted as a block in the first place.
         reportError(errors, "Expected no arguments for do block", position);
-        return;
+        return false;
     }
 
     const startLine = position.line;
     const startColumn = position.column;
 
-    const children = parseBlock(input, position, errors, indentationLevel + 1, true);
+    if (!interpretBlock(input, position, errors, indentationLevel + 1, true)) {
+        return false;
+    }
 
-    position.nextUnparsedLine = position.line;
+    position.nextUninterpretedLine = position.line;
     position.line = startLine;
     position.column = startColumn;
 
-    return {
-        kind: AstNodeKind.DoBlock,
-        children,
-    };
+    return true;
 };
 
-const parseCommand = (
+const interpretCommand = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
     indentationLevel: number,
-): CommandAstNode | undefined => {
+): boolean => {
     let nameToken = matchToken(input, position, TokenKind.Identifier);
 
     if (!nameToken) {
         reportError(errors, "Expected command name", position);
-        return;
+        return false;
     }
 
     if (!matchWhitespace(input, position)) {
         reportError(errors, "Expected space between command and arguments", position);
     }
 
-    let node: CommandAstNode | undefined;
+    let result: boolean;
 
     // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
     switch (nameToken.text.toLowerCase()) {
         case "w":
         case "write":
-            node = parseWriteBody(input, position, errors);
+            result = interpretWriteBody(input, position, errors);
             break;
         case "q":
         case "quit":
-            node = parseQuitBody(input, position, errors);
+            // TODO:
+            result = interpretQuitBody(input, position, errors) !== undefined;
             break;
         case "d":
         case "do":
             // TODO: This could also be a subroutine call instead of a block.
-            node = parseDoBlockBody(input, position, errors, indentationLevel);
+            result = interpretDoBlockBody(input, position, errors, indentationLevel);
             break;
         default:
             reportError(errors, "Unrecognized command name", position);
-            return;
+            return false;
+    }
+
+    if (!result) {
+        return false;
     }
 
     if (!matchWhitespace(input, position)) {
         reportError(errors, "Expected space between arguments and next commands", position);
+        return false;
     }
 
-    return node;
+    return true;
 };
 
-const parseTag = (
+const interpretTag = (
     input: Token[][],
-    position: ParsePosition,
+    position: InterpreterPosition,
     errors: MSyntaxError[],
-): TagAstNode | undefined => {
+): string[] | null | undefined => {
     let name = "";
-    let params: IdentifierAstNode[] | undefined;
+    let params: string[] | null = null;
 
     const firstToken = getToken(input, position);
 
@@ -398,10 +311,7 @@ const parseTag = (
                     break;
                 }
 
-                params.push({
-                    kind: AstNodeKind.Identifier,
-                    text: paramToken.text,
-                });
+                params.push(paramToken.text);
 
                 if (nextToken(input, position).kind !== TokenKind.Comma) {
                     break;
@@ -419,36 +329,27 @@ const parseTag = (
         return;
     }
 
-    const children = parseBlock(input, position, errors, 0, false);
+    if (!interpretBlock(input, position, errors, 0, false)) {
+        return undefined;
+    }
 
-    return {
-        name,
-        kind: AstNodeKind.Tag,
-        children,
-        params,
-    };
+    return params;
 };
 
-export const parse = (input: Token[][]) => {
+export const interpret = (input: Token[][]) => {
+    // TODO: First do a pass to collect the tags that are available to be called.
     const errors: MSyntaxError[] = [];
-    const position = { line: 0, column: 0, nextUnparsedLine: 1 };
-    const ast: TopLevelAstNode = {
-        kind: AstNodeKind.TopLevel,
-        children: [],
-    };
+    const position = { line: 0, column: 0, nextUninterpretedLine: 1 };
 
     while (position.line < input.length) {
-        const tag = parseTag(input, position, errors);
+        const tag = interpretTag(input, position, errors);
 
-        if (!tag) {
+        if (tag === undefined) {
             break;
         }
-
-        ast.children.push(tag);
     }
 
     return {
-        ast,
         errors,
     };
 };
