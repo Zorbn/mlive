@@ -10,6 +10,12 @@ import { Token, TokenKind } from "./tokenizer.js";
 
 type MValue = string | number;
 
+interface InterpreterPosition {
+    line: number;
+    column: number;
+    nextUninterpretedLine: number;
+}
+
 interface InterpreterState {
     position: InterpreterPosition;
     // The number of dots before each line (in addition to leading whitespace).
@@ -18,15 +24,21 @@ interface InterpreterState {
     errors: MError[];
 }
 
-interface InterpreterPosition {
-    line: number;
-    column: number;
-    nextUninterpretedLine: number;
-}
+const makeInterpreterState = (): InterpreterState => ({
+    position: { line: 0, column: 0, nextUninterpretedLine: 1 },
+    indentationLevel: 0,
+    errors: [],
+});
 
 const enum CommandResult {
     Continue,
     Quit,
+    Halt,
+}
+
+const enum TagResult {
+    NoParams,
+    Params,
     Halt,
 }
 
@@ -280,13 +292,13 @@ const interpretCommand = (input: Token[][], state: InterpreterState): CommandRes
     return result;
 };
 
-const interpretTag = (input: Token[][], state: InterpreterState, name: string): boolean => {
-    let params: string[] | null = null;
+const interpretTag = (input: Token[][], state: InterpreterState, params?: string[]): TagResult => {
+    let result = TagResult.NoParams;
 
     if (getToken(input, state).kind === TokenKind.LeftParen) {
         nextToken(input, state);
 
-        params = [];
+        result = TagResult.Params;
 
         for (let i = 0; ; i++) {
             let paramToken = matchToken(input, state, TokenKind.Identifier);
@@ -299,33 +311,59 @@ const interpretTag = (input: Token[][], state: InterpreterState, name: string): 
                 break;
             }
 
-            params.push(paramToken.text);
+            if (params) {
+                params.push(paramToken.text);
+            }
 
-            if (nextToken(input, state).kind !== TokenKind.Comma) {
+            if (!matchToken(input, state, TokenKind.Comma)) {
                 break;
             }
         }
 
         if (!matchToken(input, state, TokenKind.RightParen)) {
             reportError("Unterminated parameter list", state);
+            return TagResult.Halt;
         }
     }
 
     if (!matchWhitespace(input, state)) {
         reportError("Expected space after tag name", state);
-        return false;
+        return TagResult.Halt;
     }
 
-    return true;
+    return result;
 };
 
 export const interpret = (input: Token[][]) => {
-    // TODO: First do a pass to collect the tags that are available to be called.
-    const state = {
-        position: { line: 0, column: 0, nextUninterpretedLine: 1 },
-        indentationLevel: 0,
-        errors: [],
-    };
+    let state = makeInterpreterState();
+
+    while (state.position.line < input.length) {
+        const firstToken = getToken(input, state);
+
+        if (firstToken.kind === TokenKind.Identifier) {
+            const line = state.position.line;
+            const name = firstToken.text;
+
+            nextToken(input, state);
+
+            const params: string[] = [];
+            const result = interpretTag(input, state, params);
+
+            if (result == TagResult.Halt) {
+                return {
+                    errors: state.errors,
+                };
+            }
+
+            const paramDebugText = result == TagResult.Params ? `(${params})` : ": No params";
+
+            console.log(`Found tag @ ${line}: ${name}${paramDebugText}`);
+        }
+
+        moveToNextUninterpretedLine(state);
+    }
+
+    state = makeInterpreterState();
 
     while (state.position.line < input.length) {
         const firstToken = getToken(input, state);
@@ -333,7 +371,7 @@ export const interpret = (input: Token[][]) => {
         if (firstToken.kind === TokenKind.Identifier) {
             nextToken(input, state);
 
-            if (!interpretTag(input, state, firstToken.text)) {
+            if (interpretTag(input, state) == TagResult.Halt) {
                 break;
             }
         }
