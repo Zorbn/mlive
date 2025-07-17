@@ -41,7 +41,7 @@ SCRIPT
 
 main
     wRIte "Hello, world"
-    w "Result of my function is: " d
+    w "Result of my function is: ",$$myFunction() d
     . d  w "In the block 1"
     . . w "In the inner block 1"
     . . w "In the inner block 2"

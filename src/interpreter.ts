@@ -26,6 +26,7 @@ interface InterpreterState {
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number;
     tags: Map<string, Tag>;
+    valueStack: MValue[];
     // TODO: Add stack info used for quitting out of blocks and tags.
     errors: MError[];
 }
@@ -115,29 +116,70 @@ const reportError = (message: string, state: InterpreterState) => {
     });
 };
 
-const interpretExpression = (input: Token[][], state: InterpreterState): MValue | undefined => {
-    const token = getToken(input, state);
+const interpretExpression = (input: Token[][], state: InterpreterState): boolean => {
+    const firstToken = getToken(input, state);
 
-    let value: MValue;
+    if (firstToken.kind == TokenKind.Dollar) {
+        nextToken(input, state);
 
-    switch (token.kind) {
+        if (!matchToken(input, state, TokenKind.Dollar)) {
+            reportError("Builtins are not supported yet", state);
+            return false;
+        }
+
+        const nameToken = getToken(input, state);
+
+        if (nameToken.kind != TokenKind.Identifier) {
+            reportError("Expected an identifier", state);
+            return false;
+        }
+
+        nextToken(input, state);
+
+        if (!matchToken(input, state, TokenKind.LeftParen)) {
+            reportError("Expected argument list", state);
+            return false;
+        }
+
+        // TODO: Gather arguments if there are any.
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated argument list", state);
+            return false;
+        }
+
+        // TODO: The tag might not exist.
+        const callPosition = {
+            line: state.position.line,
+            column: state.position.column,
+            nextUninterpretedLine: state.position.nextUninterpretedLine,
+        };
+        jumpToLine(state.tags.get(nameToken.text)!.line, state);
+        interpretTopLevel(input, state);
+        state.position = callPosition;
+
+        return true;
+    }
+
+    switch (firstToken.kind) {
         case TokenKind.String:
-            value = token.value;
+            state.valueStack.push(firstToken.value);
             break;
         case TokenKind.Number:
-            value = token.value;
+            state.valueStack.push(firstToken.value);
             break;
         case TokenKind.Identifier:
-            value = token.text;
+            // TODO: Look up value stored in variable.
+            state.valueStack.push(firstToken.text);
             break;
         default:
             reportError("Expected an expression", state);
-            return;
+            return false;
     }
 
     nextToken(input, state);
 
-    return value;
+    return true;
 };
 
 const interpretBlock = (
@@ -210,16 +252,14 @@ const interpretWriteBody = (input: Token[][], state: InterpreterState): boolean 
     }
 
     while (true) {
-        const expression = interpretExpression(input, state);
-
-        if (!expression) {
+        if (!interpretExpression(input, state)) {
             break;
         }
 
         // TODO: This isn't how printing should be handled, output should be a string
         // that goes to an output element instead of the console. Also, expression values
         // should be printed in a way that matches M. Also, there should be no implicit newline.
-        console.log(expression);
+        console.log(state.valueStack.pop());
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
@@ -234,9 +274,7 @@ const interpretQuitBody = (input: Token[][], state: InterpreterState): boolean =
         return true;
     }
 
-    // TODO: Actually do the quitting part of quit.
-
-    return interpretExpression(input, state) !== undefined;
+    return interpretExpression(input, state);
 };
 
 const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolean => {
@@ -287,7 +325,6 @@ const interpretCommand = (input: Token[][], state: InterpreterState): CommandRes
             break;
         case "q":
         case "quit":
-            // TODO:
             result = interpretQuitBody(input, state) ? CommandResult.Quit : CommandResult.Halt;
             break;
         case "d":
@@ -357,11 +394,32 @@ const interpretTag = (input: Token[][], state: InterpreterState, params?: string
     return result;
 };
 
+const interpretTopLevel = (input: Token[][], state: InterpreterState) => {
+    while (state.position.line < input.length) {
+        const firstToken = getToken(input, state);
+
+        if (firstToken.kind === TokenKind.Identifier) {
+            nextToken(input, state);
+
+            if (interpretTag(input, state) == TagResult.Halt) {
+                break;
+            }
+        }
+
+        const result = interpretBlock(input, state, false);
+
+        if (result == CommandResult.Quit || result == CommandResult.Halt) {
+            break;
+        }
+    }
+};
+
 export const interpret = (input: Token[][]) => {
     const state = {
         position: makeInterpreterPosition(),
         indentationLevel: 0,
         tags: new Map(),
+        valueStack: [],
         errors: [],
     };
 
@@ -400,24 +458,7 @@ export const interpret = (input: Token[][]) => {
     state.position = makeInterpreterPosition();
     jumpToLine(state.tags.get("main").line, state);
 
-    while (state.position.line < input.length) {
-        const firstToken = getToken(input, state);
-
-        if (firstToken.kind === TokenKind.Identifier) {
-            nextToken(input, state);
-
-            if (interpretTag(input, state) == TagResult.Halt) {
-                break;
-            }
-        }
-
-        const result = interpretBlock(input, state, false);
-
-        // TODO: Quit should return to the last call site if there is one.
-        if (result == CommandResult.Halt || result == CommandResult.Quit) {
-            break;
-        }
-    }
+    interpretTopLevel(input, state);
 
     return {
         errors: state.errors,
