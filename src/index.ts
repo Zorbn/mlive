@@ -50,6 +50,9 @@ main
 
 myFunction()
     q 777
+
+identity(x)
+    q x
     `);
 });
 

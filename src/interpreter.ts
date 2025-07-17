@@ -10,6 +10,11 @@ import { Token, TokenKind } from "./tokenizer.js";
 
 type MValue = string | number;
 
+interface Tag {
+    line: number;
+    params: string[];
+}
+
 interface InterpreterPosition {
     line: number;
     column: number;
@@ -20,14 +25,15 @@ interface InterpreterState {
     position: InterpreterPosition;
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number;
+    tags: Map<string, Tag>;
     // TODO: Add stack info used for quitting out of blocks and tags.
     errors: MError[];
 }
 
-const makeInterpreterState = (): InterpreterState => ({
-    position: { line: 0, column: 0, nextUninterpretedLine: 1 },
-    indentationLevel: 0,
-    errors: [],
+const makeInterpreterPosition = (): InterpreterPosition => ({
+    line: 0,
+    column: 0,
+    nextUninterpretedLine: 1,
 });
 
 const enum CommandResult {
@@ -43,9 +49,13 @@ const enum TagResult {
 }
 
 const moveToNextUninterpretedLine = (state: InterpreterState) => {
+    jumpToLine(state.position.nextUninterpretedLine, state);
+};
+
+const jumpToLine = (line: number, state: InterpreterState) => {
     state.position.column = 0;
-    state.position.line = state.position.nextUninterpretedLine;
-    state.position.nextUninterpretedLine += 1;
+    state.position.line = line;
+    state.position.nextUninterpretedLine = line + 1;
 };
 
 const getToken = (input: Token[][], state: InterpreterState) =>
@@ -230,7 +240,7 @@ const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolea
     const blockResult = interpretBlock(input, state, true);
     state.indentationLevel--;
 
-    if (!blockResult) {
+    if (blockResult == CommandResult.Halt) {
         return false;
     }
 
@@ -335,7 +345,12 @@ const interpretTag = (input: Token[][], state: InterpreterState, params?: string
 };
 
 export const interpret = (input: Token[][]) => {
-    let state = makeInterpreterState();
+    const state = {
+        position: makeInterpreterPosition(),
+        indentationLevel: 0,
+        tags: new Map(),
+        errors: [],
+    };
 
     while (state.position.line < input.length) {
         const firstToken = getToken(input, state);
@@ -358,12 +373,19 @@ export const interpret = (input: Token[][]) => {
             const paramDebugText = result == TagResult.Params ? `(${params})` : ": No params";
 
             console.log(`Found tag @ ${line}: ${name}${paramDebugText}`);
+
+            // TODO: What should happen when multiple tags have the same name? Error?
+            state.tags.set(name, {
+                line,
+                params,
+            });
         }
 
         moveToNextUninterpretedLine(state);
     }
 
-    state = makeInterpreterState();
+    state.position = makeInterpreterPosition();
+    jumpToLine(state.tags.get("main").line, state);
 
     while (state.position.line < input.length) {
         const firstToken = getToken(input, state);
