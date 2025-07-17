@@ -145,10 +145,14 @@ const interpretBlock = (
     state: InterpreterState,
     startOnNextLine: boolean,
 ): CommandResult => {
+    let isQuittingBlock = false;
+
     while (true) {
         while (
             state.position.line < input.length &&
-            (startOnNextLine || getToken(input, state).kind === TokenKind.TrailingWhitespace)
+            (startOnNextLine ||
+                isQuittingBlock ||
+                getToken(input, state).kind === TokenKind.TrailingWhitespace)
         ) {
             moveToNextUninterpretedLine(state);
             startOnNextLine = false;
@@ -183,8 +187,17 @@ const interpretBlock = (
 
         const result = interpretCommand(input, state);
 
-        if (result == CommandResult.Quit || result == CommandResult.Halt) {
-            return result;
+        switch (result) {
+            case CommandResult.Quit:
+                if (state.indentationLevel > 0) {
+                    isQuittingBlock = true;
+                } else {
+                    return result;
+                }
+
+                break;
+            case CommandResult.Halt:
+                return result;
         }
     }
 };

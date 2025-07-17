@@ -46,6 +46,11 @@ main
     . . w "In the inner block 1"
     . . w "In the inner block 2"
     . w "In the block 2","Still in the block"
+    d
+    . w "This will be executed"
+    . q
+    . w "And this won't"
+    w "Done with main!"
     q
 
 myFunction()
