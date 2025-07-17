@@ -10,26 +10,40 @@ import { Token, TokenKind } from "./tokenizer.js";
 
 type MValue = string | number;
 
+interface InterpreterState {
+    position: InterpreterPosition;
+    // The number of dots before each line (in addition to leading whitespace).
+    indentationLevel: number;
+    // TODO: Add stack info used for quitting out of blocks and tags.
+    errors: MError[];
+}
+
 interface InterpreterPosition {
     line: number;
     column: number;
     nextUninterpretedLine: number;
 }
 
-const moveToNextUninterpretedLine = (position: InterpreterPosition) => {
-    position.column = 0;
-    position.line = position.nextUninterpretedLine;
-    position.nextUninterpretedLine += 1;
+const enum CommandResult {
+    Continue,
+    Quit,
+    Halt,
+}
+
+const moveToNextUninterpretedLine = (state: InterpreterState) => {
+    state.position.column = 0;
+    state.position.line = state.position.nextUninterpretedLine;
+    state.position.nextUninterpretedLine += 1;
 };
 
-const getToken = (input: Token[][], position: InterpreterPosition) =>
-    input[position.line][position.column];
+const getToken = (input: Token[][], state: InterpreterState) =>
+    input[state.position.line][state.position.column];
 
-const nextToken = (input: Token[][], position: InterpreterPosition) => {
-    const token = getToken(input, position);
+const nextToken = (input: Token[][], state: InterpreterState) => {
+    const token = getToken(input, state);
 
     if (token.kind !== TokenKind.TrailingWhitespace) {
-        position.column += 1;
+        state.position.column += 1;
     }
 
     return token;
@@ -37,30 +51,30 @@ const nextToken = (input: Token[][], position: InterpreterPosition) => {
 
 const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
     input: Token[][],
-    position: InterpreterPosition,
+    state: InterpreterState,
     validKind: K,
 ): T | undefined => {
-    const token = getToken(input, position);
+    const token = getToken(input, state);
 
     if (token.kind !== validKind) {
         return;
     }
 
-    return nextToken(input, position) as T;
+    return nextToken(input, state) as T;
 };
 
-const matchWhitespace = (input: Token[][], position: InterpreterPosition): boolean => {
-    if (!getWhitespace(input, position)) {
+const matchWhitespace = (input: Token[][], state: InterpreterState): boolean => {
+    if (!getWhitespace(input, state)) {
         return false;
     }
 
-    nextToken(input, position);
+    nextToken(input, state);
 
     return true;
 };
 
-const getWhitespace = (input: Token[][], position: InterpreterPosition): boolean => {
-    const token = getToken(input, position);
+const getWhitespace = (input: Token[][], state: InterpreterState): boolean => {
+    const token = getToken(input, state);
 
     return (
         token.kind === TokenKind.Space ||
@@ -69,22 +83,18 @@ const getWhitespace = (input: Token[][], position: InterpreterPosition): boolean
     );
 };
 
-const reportError = (errors: MError[], message: string, position: InterpreterPosition) => {
-    console.log(message, position);
-    errors.push({
+const reportError = (message: string, state: InterpreterState) => {
+    console.log(message, state);
+    state.errors.push({
         message,
-        line: position.line,
+        line: state.position.line,
         // TODO: The column here is actually the index of the token. We should store the real column of each token so it can be reported here.
-        column: position.column,
+        column: state.position.column,
     });
 };
 
-const interpretExpression = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-): MValue | undefined => {
-    const token = getToken(input, position);
+const interpretExpression = (input: Token[][], state: InterpreterState): MValue | undefined => {
+    const token = getToken(input, state);
 
     let value: MValue;
 
@@ -99,78 +109,73 @@ const interpretExpression = (
             value = token.text;
             break;
         default:
-            reportError(errors, "Expected an expression", position);
+            reportError("Expected an expression", state);
             return;
     }
 
-    nextToken(input, position);
+    nextToken(input, state);
 
     return value;
 };
 
 const interpretBlock = (
     input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-    // The number of dots before each line (in addition to leading whitespace).
-    indentationLevel: number,
+    state: InterpreterState,
     startOnNextLine: boolean,
-): boolean => {
+): CommandResult => {
     while (true) {
         while (
-            position.line < input.length &&
-            (startOnNextLine || getToken(input, position).kind === TokenKind.TrailingWhitespace)
+            state.position.line < input.length &&
+            (startOnNextLine || getToken(input, state).kind === TokenKind.TrailingWhitespace)
         ) {
-            moveToNextUninterpretedLine(position);
+            moveToNextUninterpretedLine(state);
             startOnNextLine = false;
 
-            if (position.line >= input.length) {
-                return true;
+            if (state.position.line >= input.length) {
+                return CommandResult.Continue;
             }
 
-            const startColumn = position.column;
+            const startColumn = state.position.column;
 
-            let didBlockEnd = !matchToken(input, position, TokenKind.LeadingWhitespace);
+            let didBlockEnd = !matchToken(input, state, TokenKind.LeadingWhitespace);
 
             if (!didBlockEnd) {
-                for (let i = 0; i < indentationLevel; i++) {
-                    if (!matchToken(input, position, TokenKind.Dot)) {
+                for (let i = 0; i < state.indentationLevel; i++) {
+                    if (!matchToken(input, state, TokenKind.Dot)) {
                         didBlockEnd = true;
                         break;
                     }
 
-                    if (!matchToken(input, position, TokenKind.Space)) {
-                        reportError(errors, "Expected space after dot", position);
-                        return false;
+                    if (!matchToken(input, state, TokenKind.Space)) {
+                        reportError("Expected space after dot", state);
+                        return CommandResult.Halt;
                     }
                 }
             }
 
             if (didBlockEnd) {
-                position.column = startColumn;
-                return true;
+                state.position.column = startColumn;
+                return CommandResult.Continue;
             }
         }
 
-        if (!interpretCommand(input, position, errors, indentationLevel)) {
-            return false;
+        const result = interpretCommand(input, state);
+
+        if (result == CommandResult.Quit || result == CommandResult.Halt) {
+            return result;
         }
     }
 };
 
-const interpretWriteBody = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-): boolean => {
+const interpretWriteBody = (input: Token[][], state: InterpreterState): boolean => {
     // TODO: Support formatting with #, ?, and !.
 
-    if (getWhitespace(input, position)) {
+    if (getWhitespace(input, state)) {
         return true;
     }
 
     while (true) {
-        const expression = interpretExpression(input, position, errors);
+        const expression = interpretExpression(input, state);
 
         if (!expression) {
             break;
@@ -181,7 +186,7 @@ const interpretWriteBody = (
         // should be printed in a way that matches M. Also, there should be no implicit newline.
         console.log(expression);
 
-        if (!matchToken(input, position, TokenKind.Comma)) {
+        if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
     }
@@ -189,167 +194,159 @@ const interpretWriteBody = (
     return true;
 };
 
-const interpretQuitBody = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-): MValue | null | undefined => {
-    if (getWhitespace(input, position)) {
-        return null;
+const interpretQuitBody = (input: Token[][], state: InterpreterState): boolean => {
+    if (getWhitespace(input, state)) {
+        return true;
     }
 
     // TODO: Actually do the quitting part of quit.
 
-    return interpretExpression(input, position, errors);
+    return interpretExpression(input, state) !== undefined;
 };
 
-const interpretDoBlockBody = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-    indentationLevel: number,
-): boolean => {
-    if (!getWhitespace(input, position)) {
+const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolean => {
+    if (!getWhitespace(input, state)) {
         // TODO: If there are arguments the "do" command should not be interpreted as a block in the first place.
-        reportError(errors, "Expected no arguments for do block", position);
+        reportError("Expected no arguments for do block", state);
         return false;
     }
 
-    const startLine = position.line;
-    const startColumn = position.column;
+    const startLine = state.position.line;
+    const startColumn = state.position.column;
 
-    if (!interpretBlock(input, position, errors, indentationLevel + 1, true)) {
+    state.indentationLevel++;
+    const blockResult = interpretBlock(input, state, true);
+    state.indentationLevel--;
+
+    if (!blockResult) {
         return false;
     }
 
-    position.nextUninterpretedLine = position.line;
-    position.line = startLine;
-    position.column = startColumn;
+    state.position.nextUninterpretedLine = state.position.line;
+    state.position.line = startLine;
+    state.position.column = startColumn;
 
     return true;
 };
 
-const interpretCommand = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-    indentationLevel: number,
-): boolean => {
-    let nameToken = matchToken(input, position, TokenKind.Identifier);
+const interpretCommand = (input: Token[][], state: InterpreterState): CommandResult => {
+    let nameToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!nameToken) {
-        reportError(errors, "Expected command name", position);
-        return false;
+        reportError("Expected command name", state);
+        return CommandResult.Halt;
     }
 
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space between command and arguments", position);
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space between command and arguments", state);
+        return CommandResult.Halt;
     }
 
-    let result: boolean;
+    let result: CommandResult;
 
     // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
     switch (nameToken.text.toLowerCase()) {
         case "w":
         case "write":
-            result = interpretWriteBody(input, position, errors);
+            result = interpretWriteBody(input, state) ? CommandResult.Continue : CommandResult.Halt;
             break;
         case "q":
         case "quit":
             // TODO:
-            result = interpretQuitBody(input, position, errors) !== undefined;
+            result = interpretQuitBody(input, state) ? CommandResult.Quit : CommandResult.Halt;
             break;
         case "d":
         case "do":
             // TODO: This could also be a subroutine call instead of a block.
-            result = interpretDoBlockBody(input, position, errors, indentationLevel);
+            result = interpretDoBlockBody(input, state)
+                ? CommandResult.Continue
+                : CommandResult.Halt;
             break;
         default:
-            reportError(errors, "Unrecognized command name", position);
-            return false;
+            reportError("Unrecognized command name", state);
+            result = CommandResult.Halt;
+            break;
     }
 
-    if (!result) {
-        return false;
+    if (result === CommandResult.Halt) {
+        return result;
     }
 
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space between arguments and next commands", position);
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space between arguments and next commands", state);
+        return CommandResult.Halt;
+    }
+
+    return result;
+};
+
+const interpretTag = (input: Token[][], state: InterpreterState, name: string): boolean => {
+    let params: string[] | null = null;
+
+    if (getToken(input, state).kind === TokenKind.LeftParen) {
+        nextToken(input, state);
+
+        params = [];
+
+        for (let i = 0; ; i++) {
+            let paramToken = matchToken(input, state, TokenKind.Identifier);
+
+            if (!paramToken) {
+                if (i > 0) {
+                    reportError("Expected parameter name", state);
+                }
+
+                break;
+            }
+
+            params.push(paramToken.text);
+
+            if (nextToken(input, state).kind !== TokenKind.Comma) {
+                break;
+            }
+        }
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated parameter list", state);
+        }
+    }
+
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space after tag name", state);
         return false;
     }
 
     return true;
 };
 
-const interpretTag = (
-    input: Token[][],
-    position: InterpreterPosition,
-    errors: MError[],
-): string[] | null | undefined => {
-    let name = "";
-    let params: string[] | null = null;
-
-    const firstToken = getToken(input, position);
-
-    if (firstToken.kind === TokenKind.Identifier) {
-        name = firstToken.text;
-        nextToken(input, position);
-
-        if (getToken(input, position).kind === TokenKind.LeftParen) {
-            nextToken(input, position);
-
-            params = [];
-
-            for (let i = 0; ; i++) {
-                let paramToken = matchToken(input, position, TokenKind.Identifier);
-
-                if (!paramToken) {
-                    if (i > 0) {
-                        reportError(errors, "Expected parameter name", position);
-                    }
-
-                    break;
-                }
-
-                params.push(paramToken.text);
-
-                if (nextToken(input, position).kind !== TokenKind.Comma) {
-                    break;
-                }
-            }
-
-            if (!matchToken(input, position, TokenKind.RightParen)) {
-                reportError(errors, "Unterminated parameter list", position);
-            }
-        }
-    }
-
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space after tag name", position);
-        return;
-    }
-
-    if (!interpretBlock(input, position, errors, 0, false)) {
-        return undefined;
-    }
-
-    return params;
-};
-
 export const interpret = (input: Token[][]) => {
     // TODO: First do a pass to collect the tags that are available to be called.
-    const errors: MError[] = [];
-    const position = { line: 0, column: 0, nextUninterpretedLine: 1 };
+    const state = {
+        position: { line: 0, column: 0, nextUninterpretedLine: 1 },
+        indentationLevel: 0,
+        errors: [],
+    };
 
-    while (position.line < input.length) {
-        const tag = interpretTag(input, position, errors);
+    while (state.position.line < input.length) {
+        const firstToken = getToken(input, state);
 
-        if (tag === undefined) {
+        if (firstToken.kind === TokenKind.Identifier) {
+            nextToken(input, state);
+
+            if (!interpretTag(input, state, firstToken.text)) {
+                break;
+            }
+        }
+
+        const result = interpretBlock(input, state, false);
+
+        // TODO: Quit should return to the last call site if there is one.
+        if (result == CommandResult.Halt || result == CommandResult.Quit) {
             break;
         }
     }
 
     return {
-        errors,
+        errors: state.errors,
     };
 };
