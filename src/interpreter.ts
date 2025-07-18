@@ -27,7 +27,7 @@ interface InterpreterState {
     indentationLevel: number;
     tags: Map<string, Tag>;
     valueStack: MValue[];
-    // TODO: Add stack info used for quitting out of blocks and tags.
+    environmentStack: Map<string, MValue>[];
     errors: MError[];
 }
 
@@ -57,6 +57,18 @@ const jumpToLine = (line: number, state: InterpreterState) => {
     state.position.column = 0;
     state.position.line = line;
     state.position.nextUninterpretedLine = line + 1;
+};
+
+const lookupVariable = (name: string, state: InterpreterState): MValue => {
+    for (let i = state.environmentStack.length - 1; i >= 0; i--) {
+        const value = state.environmentStack[i].get(name);
+
+        if (value !== undefined) {
+            return value;
+        }
+    }
+
+    return "";
 };
 
 const getToken = (input: Token[][], state: InterpreterState) =>
@@ -136,26 +148,55 @@ const interpretExpression = (input: Token[][], state: InterpreterState): boolean
 
         nextToken(input, state);
 
-        if (!matchToken(input, state, TokenKind.LeftParen)) {
-            reportError("Expected argument list", state);
+        const tag = state.tags.get(nameToken.text);
+
+        if (tag === undefined) {
+            reportError(`Tag \"${nameToken.text}\" not found`, state);
             return false;
         }
 
-        // TODO: Gather arguments if there are any.
+        let didPushEnvironment = false;
 
-        if (!matchToken(input, state, TokenKind.RightParen)) {
-            reportError("Unterminated argument list", state);
-            return false;
+        if (matchToken(input, state, TokenKind.LeftParen)) {
+            for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
+                if (!interpretExpression(input, state)) {
+                    break;
+                }
+
+                if (i < tag.params.length) {
+                    if (!didPushEnvironment) {
+                        state.environmentStack.push(new Map());
+                        didPushEnvironment = true;
+                    }
+
+                    state.environmentStack[state.environmentStack.length - 1].set(
+                        tag.params[i],
+                        state.valueStack.pop()!,
+                    );
+                }
+
+                if (!matchToken(input, state, TokenKind.Comma)) {
+                    break;
+                }
+            }
+
+            if (!matchToken(input, state, TokenKind.RightParen)) {
+                reportError("Unterminated argument list", state);
+                return false;
+            }
         }
 
-        // TODO: The tag might not exist.
         const callPosition = {
             line: state.position.line,
             column: state.position.column,
             nextUninterpretedLine: state.position.nextUninterpretedLine,
         };
-        jumpToLine(state.tags.get(nameToken.text)!.line, state);
+        const callEnvironmentStackLength = state.environmentStack.length;
+
+        jumpToLine(tag.line, state);
         interpretTopLevel(input, state);
+
+        state.environmentStack.length = callEnvironmentStackLength;
         state.position = callPosition;
 
         return true;
@@ -169,8 +210,8 @@ const interpretExpression = (input: Token[][], state: InterpreterState): boolean
             state.valueStack.push(firstToken.value);
             break;
         case TokenKind.Identifier:
-            // TODO: Look up value stored in variable.
-            state.valueStack.push(firstToken.text);
+            const value = lookupVariable(firstToken.text, state);
+            state.valueStack.push(value);
             break;
         default:
             reportError("Expected an expression", state);
@@ -247,11 +288,7 @@ const interpretBlock = (
 const interpretWriteBody = (input: Token[][], state: InterpreterState): boolean => {
     // TODO: Support formatting with #, ?, and !.
 
-    if (getWhitespace(input, state)) {
-        return true;
-    }
-
-    while (true) {
+    while (!matchWhitespace(input, state)) {
         if (!interpretExpression(input, state)) {
             break;
         }
@@ -286,6 +323,7 @@ const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolea
 
     const startLine = state.position.line;
     const startColumn = state.position.column;
+    const startEnvironmentStackLength = state.environmentStack.length;
 
     state.indentationLevel++;
     const blockResult = interpretBlock(input, state, true);
@@ -295,6 +333,7 @@ const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolea
         return false;
     }
 
+    state.environmentStack.length = startEnvironmentStackLength;
     state.position.nextUninterpretedLine = state.position.line;
     state.position.line = startLine;
     state.position.column = startColumn;
@@ -420,6 +459,7 @@ export const interpret = (input: Token[][]) => {
         indentationLevel: 0,
         tags: new Map(),
         valueStack: [],
+        environmentStack: [],
         errors: [],
     };
 
