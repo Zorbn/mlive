@@ -6,7 +6,6 @@ import { Token, TokenKind } from "./tokenizer.js";
 // unary/binary ops: simple precedence (unary ops before binary ops, left to right),
 // negation of operators: '< means >=,
 // builtins like $O: $O(array("subscript")),
-// function calls and subroutine do calls: mostly just useful to make more useful examples when we start interpreting code,
 
 type MValue = string | number;
 
@@ -128,6 +127,83 @@ const reportError = (message: string, state: InterpreterState) => {
     });
 };
 
+const interpretCall = (
+    input: Token[][],
+    state: InterpreterState,
+    hasReturnValue: boolean,
+): boolean => {
+    const nameToken = getToken(input, state);
+
+    if (nameToken.kind != TokenKind.Identifier) {
+        reportError("Expected an identifier", state);
+        return false;
+    }
+
+    nextToken(input, state);
+
+    const tag = state.tags.get(nameToken.text);
+
+    if (tag === undefined) {
+        reportError(`Tag \"${nameToken.text}\" not found`, state);
+        return false;
+    }
+
+    let didPushEnvironment = false;
+
+    if (matchToken(input, state, TokenKind.LeftParen)) {
+        for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
+            if (!interpretExpression(input, state)) {
+                break;
+            }
+
+            if (i < tag.params.length) {
+                if (!didPushEnvironment) {
+                    state.environmentStack.push(new Map());
+                    didPushEnvironment = true;
+                }
+
+                state.environmentStack[state.environmentStack.length - 1].set(
+                    tag.params[i],
+                    state.valueStack.pop()!,
+                );
+            }
+
+            if (!matchToken(input, state, TokenKind.Comma)) {
+                break;
+            }
+        }
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated argument list", state);
+            return false;
+        }
+    }
+
+    const callPosition = {
+        line: state.position.line,
+        column: state.position.column,
+        nextUninterpretedLine: state.position.nextUninterpretedLine,
+    };
+    const callEnvironmentStackLength = state.environmentStack.length;
+    const callValueStackLength = state.valueStack.length;
+
+    jumpToLine(tag.line, state);
+    interpretTopLevel(input, state);
+
+    if (hasReturnValue) {
+        if (state.valueStack.length === callValueStackLength) {
+            state.valueStack.push("");
+        }
+    } else {
+        state.valueStack.length = callValueStackLength;
+    }
+
+    state.environmentStack.length = callEnvironmentStackLength;
+    state.position = callPosition;
+
+    return true;
+};
+
 const interpretExpression = (input: Token[][], state: InterpreterState): boolean => {
     const firstToken = getToken(input, state);
 
@@ -139,67 +215,7 @@ const interpretExpression = (input: Token[][], state: InterpreterState): boolean
             return false;
         }
 
-        const nameToken = getToken(input, state);
-
-        if (nameToken.kind != TokenKind.Identifier) {
-            reportError("Expected an identifier", state);
-            return false;
-        }
-
-        nextToken(input, state);
-
-        const tag = state.tags.get(nameToken.text);
-
-        if (tag === undefined) {
-            reportError(`Tag \"${nameToken.text}\" not found`, state);
-            return false;
-        }
-
-        let didPushEnvironment = false;
-
-        if (matchToken(input, state, TokenKind.LeftParen)) {
-            for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
-                if (!interpretExpression(input, state)) {
-                    break;
-                }
-
-                if (i < tag.params.length) {
-                    if (!didPushEnvironment) {
-                        state.environmentStack.push(new Map());
-                        didPushEnvironment = true;
-                    }
-
-                    state.environmentStack[state.environmentStack.length - 1].set(
-                        tag.params[i],
-                        state.valueStack.pop()!,
-                    );
-                }
-
-                if (!matchToken(input, state, TokenKind.Comma)) {
-                    break;
-                }
-            }
-
-            if (!matchToken(input, state, TokenKind.RightParen)) {
-                reportError("Unterminated argument list", state);
-                return false;
-            }
-        }
-
-        const callPosition = {
-            line: state.position.line,
-            column: state.position.column,
-            nextUninterpretedLine: state.position.nextUninterpretedLine,
-        };
-        const callEnvironmentStackLength = state.environmentStack.length;
-
-        jumpToLine(tag.line, state);
-        interpretTopLevel(input, state);
-
-        state.environmentStack.length = callEnvironmentStackLength;
-        state.position = callPosition;
-
-        return true;
+        return interpretCall(input, state, true);
     }
 
     switch (firstToken.kind) {
@@ -314,11 +330,9 @@ const interpretQuitBody = (input: Token[][], state: InterpreterState): boolean =
     return interpretExpression(input, state);
 };
 
-const interpretDoBlockBody = (input: Token[][], state: InterpreterState): boolean => {
+const interpretDoBody = (input: Token[][], state: InterpreterState): boolean => {
     if (!getWhitespace(input, state)) {
-        // TODO: If there are arguments the "do" command should not be interpreted as a block in the first place.
-        reportError("Expected no arguments for do block", state);
-        return false;
+        return interpretCall(input, state, true);
     }
 
     const startLine = state.position.line;
@@ -368,10 +382,7 @@ const interpretCommand = (input: Token[][], state: InterpreterState): CommandRes
             break;
         case "d":
         case "do":
-            // TODO: This could also be a subroutine call instead of a block.
-            result = interpretDoBlockBody(input, state)
-                ? CommandResult.Continue
-                : CommandResult.Halt;
+            result = interpretDoBody(input, state) ? CommandResult.Continue : CommandResult.Halt;
             break;
         default:
             reportError("Unrecognized command name", state);
@@ -466,9 +477,8 @@ export const interpret = (input: Token[][]) => {
     while (state.position.line < input.length) {
         const firstToken = getToken(input, state);
 
-        if (firstToken.kind === TokenKind.Identifier) {
+        if (firstToken.kind === TokenKind.Identifier && !state.tags.has(firstToken.text)) {
             const line = state.position.line;
-            const name = firstToken.text;
 
             nextToken(input, state);
 
@@ -483,10 +493,9 @@ export const interpret = (input: Token[][]) => {
 
             const paramDebugText = result == TagResult.Params ? `(${params})` : ": No params";
 
-            console.log(`Found tag @ ${line}: ${name}${paramDebugText}`);
+            console.log(`Found tag @ ${line}: ${firstToken.text}${paramDebugText}`);
 
-            // TODO: What should happen when multiple tags have the same name? Error?
-            state.tags.set(name, {
+            state.tags.set(firstToken.text, {
                 line,
                 params,
             });

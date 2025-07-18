@@ -41,6 +41,7 @@ SCRIPT
 
 main
     wRIte "Hello, world"
+    d myOtherFunction()
     w "Result of identity on 123 is: ",$$identity(123),"!!!"
     w "Result of my function is: ",$$myFunction() d
     . d  w "In the block 1"
@@ -55,6 +56,10 @@ main
     q
 
 myFunction()
+    q 777
+
+myOtherFunction()
+    w "In the other function"
     q 777
 
 identity(x)
