@@ -2,40 +2,11 @@ import { tokenize } from "./tokenizer.js";
 import { MError } from "./mError.js";
 import { interpret } from "./interpreter.js";
 
-const handleErrors = (errors: MError[]) => {
-    if (errors.length === 0) {
-        return false;
-    }
+const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
+const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
+const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
 
-    for (const error of errors) {
-        console.log(`Error at ${error.line + 1}:${error.column + 1}: ${error.message}`);
-    }
-
-    return true;
-};
-
-const evaluate = (script: string) => {
-    const tokenizeResult = tokenize(script);
-
-    if (handleErrors(tokenizeResult.errors)) {
-        return;
-    }
-
-    console.log(tokenizeResult.tokenizedLines);
-
-    const interpretResult = interpret(tokenizeResult.tokenizedLines);
-
-    if (handleErrors(interpretResult.errors)) {
-        return;
-    }
-
-    console.log(interpretResult.output);
-    console.log("Evaluation completed successfully!");
-};
-
-document.getElementById("evaluateButton")?.addEventListener("click", () => {
-    evaluate(`
-    write !,"hi"
+inputTextArea.value = `    write !,"hi"
 
 SCRIPT
     QUIT
@@ -65,22 +36,39 @@ myOtherFunction()
 
 identity(x)
     q x
-    `);
+    `;
+
+const handleErrors = (errors: MError[]) => {
+    if (errors.length === 0) {
+        return false;
+    }
+
+    outputTextArea.value = errors
+        .map((error) => `Error at ${error.line + 1}:${error.column + 1}: ${error.message}`)
+        .join("\n");
+
+    return true;
+};
+
+const evaluate = (script: string) => {
+    const tokenizeResult = tokenize(script);
+
+    if (handleErrors(tokenizeResult.errors)) {
+        return;
+    }
+
+    console.log(tokenizeResult.tokenizedLines);
+
+    const interpretResult = interpret(tokenizeResult.tokenizedLines);
+
+    if (handleErrors(interpretResult.errors)) {
+        return;
+    }
+
+    outputTextArea.value = interpretResult.output;
+    console.log("Evaluation completed successfully!");
+};
+
+evaluateButton.addEventListener("click", () => {
+    evaluate(inputTextArea.value);
 });
-
-/*
-`
-    write "hi"
-
-SCRIPT
-    QUIT
-
-main n aVar
-    wRIte "Hello, world"
-    w "Result of my function is: ",$$myFunction()
-    q
-
-myFunction()
-    q 777
-    `
-*/
