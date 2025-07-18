@@ -29,12 +29,13 @@ const evaluate = (script: string) => {
         return;
     }
 
+    console.log(interpretResult.output);
     console.log("Evaluation completed successfully!");
 };
 
 document.getElementById("evaluateButton")?.addEventListener("click", () => {
     evaluate(`
-    write "hi"
+    write !,"hi"
 
 SCRIPT
     QUIT
@@ -42,24 +43,24 @@ SCRIPT
 main
     wRIte "Hello, world"
     d myOtherFunction()
-    w "Result of identity on 123 is: ",$$identity(123),"!!!"
-    w "Result of my function is: ",$$myFunction() d
-    . d  w "In the block 1"
-    . . w "In the inner block 1"
-    . . w "In the inner block 2"
-    . w "In the block 2","Still in the block"
+    w !,"Result of identity on 123 is: """,$$identity(123),"""!!!"
+    w !,"Result of my function is: ",$$myFunction() d
+    . d  w !,"In the block 1"
+    . . w !,"In the inner block 1"
+    . . w !,"In the inner block 2"
+    . w !,"In the block 2",!,"Still in the block"
     d
-    . w "This will be executed"
+    . w !,"This will be executed"
     . q
-    . w "And this won't"
-    w "Done with main!"
+    . w !,"And this won't"
+    w !,"Done with main!"
     q
 
 myFunction()
     q 1+999-500-100
 
 myOtherFunction()
-    w "In the other function"
+    w !,"In the other function"
     q 777
 
 identity(x)

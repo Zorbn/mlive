@@ -36,6 +36,7 @@ interface InterpreterState {
     tags: Map<string, Tag>;
     valueStack: MValue[];
     environmentStack: Map<string, MValue>[];
+    output: string[];
     errors: MError[];
 }
 
@@ -358,17 +359,28 @@ const interpretBlock = (
 };
 
 const interpretWriteBody = (input: Token[][], state: InterpreterState): boolean => {
-    // TODO: Support formatting with #, ?, and !.
+    // TODO: Support formatting with ?.
 
     while (!matchWhitespace(input, state)) {
-        if (!interpretExpression(input, state)) {
-            break;
-        }
+        const token = getToken(input, state);
 
-        // TODO: This isn't how printing should be handled, output should be a string
-        // that goes to an output element instead of the console. Also, expression values
-        // should be printed in a way that matches M. Also, there should be no implicit newline.
-        console.log(state.valueStack.pop());
+        switch (token.kind) {
+            case TokenKind.Hash:
+                nextToken(input, state);
+                state.output.length = 0;
+                break;
+            case TokenKind.ExclamationPoint:
+                nextToken(input, state);
+                state.output.push("\n");
+                break;
+            default:
+                if (!interpretExpression(input, state)) {
+                    return false;
+                }
+
+                state.output.push(state.valueStack.pop()!.toString());
+                break;
+        }
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
@@ -527,6 +539,7 @@ export const interpret = (input: Token[][]) => {
         tags: new Map(),
         valueStack: [],
         environmentStack: [],
+        output: [],
         errors: [],
     };
 
@@ -543,6 +556,7 @@ export const interpret = (input: Token[][]) => {
 
             if (result == TagResult.Halt) {
                 return {
+                    output: "",
                     errors: state.errors,
                 };
             }
@@ -566,6 +580,7 @@ export const interpret = (input: Token[][]) => {
     interpretTopLevel(input, state);
 
     return {
+        output: state.output.join(""),
         errors: state.errors,
     };
 };

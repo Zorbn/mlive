@@ -17,6 +17,7 @@ export const enum TokenKind {
     Dot,
     Plus,
     Minus,
+    ExclamationPoint,
 }
 
 interface BasicToken {
@@ -32,7 +33,8 @@ interface BasicToken {
         | TokenKind.Hash
         | TokenKind.Dot
         | TokenKind.Plus
-        | TokenKind.Minus;
+        | TokenKind.Minus
+        | TokenKind.ExclamationPoint;
 }
 
 interface IdentifierToken {
@@ -121,18 +123,37 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
 
         switch (firstChar) {
             case '"': {
-                const start = x;
+                let chars = [];
 
                 x++;
 
-                // TODO: Handle "" for a literal quote.
-                while (x < line.length && line[x] !== '"') {
-                    x++;
+                while (true) {
+                    if (x > line.length) {
+                        errors.push({
+                            message: "Unterminated string",
+                            line: y,
+                            column: x,
+                        });
+                        break;
+                    }
+
+                    if (line[x] !== '"') {
+                        chars.push(line[x]);
+                        x++;
+                        continue;
+                    }
+
+                    if (x + 1 >= line.length || line[x + 1] !== '"') {
+                        break;
+                    }
+
+                    chars.push('"');
+                    x += 2;
                 }
 
                 tokens.push({
                     kind: TokenKind.String,
-                    value: line.slice(start + 1, x),
+                    value: chars.join(""),
                 });
 
                 x++;
@@ -187,6 +208,11 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "-":
                 tokens.push({
                     kind: TokenKind.Minus,
+                });
+                break;
+            case "!":
+                tokens.push({
+                    kind: TokenKind.ExclamationPoint,
                 });
                 break;
             default:
