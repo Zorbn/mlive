@@ -56,7 +56,7 @@ main
     q
 
 myFunction()
-    q 777
+    q 1+999-500-100
 
 myOtherFunction()
     w "In the other function"

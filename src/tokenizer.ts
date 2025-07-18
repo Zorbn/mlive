@@ -15,6 +15,8 @@ export const enum TokenKind {
     Dollar,
     Hash,
     Dot,
+    Plus,
+    Minus,
 }
 
 interface BasicToken {
@@ -28,7 +30,9 @@ interface BasicToken {
         | TokenKind.Caret
         | TokenKind.Dollar
         | TokenKind.Hash
-        | TokenKind.Dot;
+        | TokenKind.Dot
+        | TokenKind.Plus
+        | TokenKind.Minus;
 }
 
 interface IdentifierToken {
@@ -173,6 +177,16 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case ".":
                 tokens.push({
                     kind: TokenKind.Dot,
+                });
+                break;
+            case "+":
+                tokens.push({
+                    kind: TokenKind.Plus,
+                });
+                break;
+            case "-":
+                tokens.push({
+                    kind: TokenKind.Minus,
                 });
                 break;
             default:

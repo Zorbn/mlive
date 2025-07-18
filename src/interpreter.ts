@@ -9,6 +9,15 @@ import { Token, TokenKind } from "./tokenizer.js";
 
 type MValue = string | number;
 
+const mValueToNumber = (value: MValue): number => {
+    if (typeof value === "string") {
+        // TODO: Implement accurate conversion.
+        return parseFloat(value);
+    }
+
+    return value;
+};
+
 interface Tag {
     line: number;
     params: string[];
@@ -204,7 +213,7 @@ const interpretCall = (
     return true;
 };
 
-const interpretExpression = (input: Token[][], state: InterpreterState): boolean => {
+const interpretPrimary = (input: Token[][], state: InterpreterState): boolean => {
     const firstToken = getToken(input, state);
 
     if (firstToken.kind == TokenKind.Dollar) {
@@ -235,6 +244,53 @@ const interpretExpression = (input: Token[][], state: InterpreterState): boolean
     }
 
     nextToken(input, state);
+
+    return true;
+};
+
+const interpretExpression = (input: Token[][], state: InterpreterState): boolean => {
+    if (!interpretPrimary(input, state)) {
+        return false;
+    }
+
+    while (true) {
+        const token = getToken(input, state);
+        let isBinaryOp = true;
+
+        switch (token.kind) {
+            case TokenKind.Plus:
+            case TokenKind.Minus:
+                break;
+            default:
+                isBinaryOp = false;
+                break;
+        }
+
+        if (!isBinaryOp) {
+            break;
+        }
+
+        nextToken(input, state);
+
+        if (!interpretPrimary(input, state)) {
+            return false;
+        }
+
+        const right = state.valueStack.pop()!;
+        const left = state.valueStack.pop()!;
+
+        switch (token.kind) {
+            case TokenKind.Plus:
+                state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
+                break;
+            case TokenKind.Minus:
+                state.valueStack.push(mValueToNumber(left) - mValueToNumber(right));
+                break;
+            default:
+                reportError("Unimplemented binary op", state);
+                break;
+        }
+    }
 
     return true;
 };
