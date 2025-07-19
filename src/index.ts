@@ -12,8 +12,10 @@ inputTextArea.value = `    write !,"hi"
 SCRIPT
     QUIT
 
-main
-    wRIte "Hello, world"
+main n var1,var2
+    s var1="a",var2="b"
+    w !,"Var1: ",var1,", Var 2: ",var2
+    wRIte !,"Hello, world"
     d myOtherFunction()
     w !,"Result of identity on 123 is: """,$$identity(123),"""!!!"
     w !,"Result of my function is: ",$$myFunction() d

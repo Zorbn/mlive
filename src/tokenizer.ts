@@ -18,6 +18,7 @@ export const enum TokenKind {
     Plus,
     Minus,
     ExclamationPoint,
+    Equals,
 }
 
 interface BasicToken {
@@ -34,7 +35,8 @@ interface BasicToken {
         | TokenKind.Dot
         | TokenKind.Plus
         | TokenKind.Minus
-        | TokenKind.ExclamationPoint;
+        | TokenKind.ExclamationPoint
+        | TokenKind.Equals;
 }
 
 interface IdentifierToken {
@@ -60,6 +62,16 @@ const isAlphabetic = (char: string) => {
     const charCode = char.charCodeAt(0);
 
     return (charCode >= 65 && charCode <= 90) || (charCode >= 97 && charCode <= 122);
+};
+
+const isAlphaNumeric = (char: string) => {
+    const charCode = char.charCodeAt(0);
+
+    return (
+        (charCode >= 65 && charCode <= 90) ||
+        (charCode >= 97 && charCode <= 122) ||
+        (charCode >= 48 && charCode <= 57)
+    );
 };
 
 const isDigit = (char: string) => {
@@ -91,7 +103,7 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
 
             x++;
 
-            while (x < line.length && isAlphabetic(line[x])) {
+            while (x < line.length && isAlphaNumeric(line[x])) {
                 x++;
             }
 
@@ -213,6 +225,11 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "!":
                 tokens.push({
                     kind: TokenKind.ExclamationPoint,
+                });
+                break;
+            case "=":
+                tokens.push({
+                    kind: TokenKind.Equals,
                 });
                 break;
             default:

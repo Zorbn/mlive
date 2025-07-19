@@ -1,6 +1,5 @@
 import { MError } from "./mError.js";
 import {
-    AstNode,
     AstNodeKind,
     BinaryOp,
     CallAstNode,
@@ -8,11 +7,12 @@ import {
     DoBlockAstNode,
     ExpressionAstNode,
     IfAstNode,
+    NewAstNode,
     QuitAstNode,
+    SetAstNode,
     TopLevelAstNode,
     WriteAstNode,
 } from "./parser.js";
-import { Token, TokenKind } from "./tokenizer.js";
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
@@ -30,11 +30,6 @@ const mValueToNumber = (value: MValue): number => {
 
     return value;
 };
-
-interface Tag {
-    line: number;
-    params: string[];
-}
 
 interface InterpreterState {
     ast: TopLevelAstNode;
@@ -256,7 +251,32 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
     return CommandResult.Continue;
 };
 
+const interpretSet = (node: SetAstNode, state: InterpreterState): boolean => {
+    for (const arg of node.args) {
+        if (!interpretExpression(arg.value, state)) {
+            return false;
+        }
+
+        setVariable(arg.name.text, state.valueStack.pop()!, state);
+    }
+
+    return true;
+};
+
+const interpretNew = (node: NewAstNode, state: InterpreterState): boolean => {
+    if (node.args.length > 0) {
+        state.environmentStack.push(new Map());
+    }
+
+    for (const arg of node.args) {
+        setVariable(arg.text, "", state);
+    }
+
+    return true;
+};
+
 const interpretCommand = (node: CommandAstNode, state: InterpreterState): CommandResult => {
+    // TODO: The interpret functions here should all be returning CommandResult instead of some returning bools.
     switch (node.kind) {
         case AstNodeKind.Write:
             return interpretWrite(node, state) ? CommandResult.Continue : CommandResult.Halt;
@@ -266,6 +286,10 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretDoBlock(node, state) ? CommandResult.Continue : CommandResult.Halt;
         case AstNodeKind.If:
             return interpretIf(node, state);
+        case AstNodeKind.Set:
+            return interpretSet(node, state) ? CommandResult.Continue : CommandResult.Halt;
+        case AstNodeKind.New:
+            return interpretNew(node, state) ? CommandResult.Continue : CommandResult.Halt;
         case AstNodeKind.Call:
             return interpretCall(node, state, false) ? CommandResult.Continue : CommandResult.Halt;
         default:

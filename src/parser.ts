@@ -8,6 +8,9 @@ export const enum AstNodeKind {
     Do,
     DoBlock,
     If,
+    SetArgument,
+    Set,
+    New,
     Identifier,
     NumberLiteral,
     StringLiteral,
@@ -51,7 +54,30 @@ export interface IfAstNode {
     children: CommandAstNode[];
 }
 
-export type CommandAstNode = WriteAstNode | QuitAstNode | CallAstNode | DoBlockAstNode | IfAstNode;
+export interface SetArgumentAstNode {
+    kind: AstNodeKind.SetArgument;
+    name: IdentifierAstNode;
+    value: ExpressionAstNode;
+}
+
+export interface SetAstNode {
+    kind: AstNodeKind.Set;
+    args: SetArgumentAstNode[];
+}
+
+export interface NewAstNode {
+    kind: AstNodeKind.New;
+    args: IdentifierAstNode[];
+}
+
+export type CommandAstNode =
+    | WriteAstNode
+    | QuitAstNode
+    | CallAstNode
+    | DoBlockAstNode
+    | IfAstNode
+    | SetAstNode
+    | NewAstNode;
 
 export type ExpressionAstNode =
     | IdentifierAstNode
@@ -520,6 +546,73 @@ const parseIfBody = (input: Token[][], state: ParserState): IfAstNode | undefine
     };
 };
 
+const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefined => {
+    const args: SetArgumentAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const token = matchToken(input, state, TokenKind.Identifier);
+
+        if (!token) {
+            return;
+        }
+
+        if (!matchToken(input, state, TokenKind.Equals)) {
+            reportError("Expected equals after identifier in set command", state);
+            return;
+        }
+
+        const expression = parseExpression(input, state);
+
+        if (!expression) {
+            return;
+        }
+
+        args.push({
+            kind: AstNodeKind.SetArgument,
+            name: {
+                kind: AstNodeKind.Identifier,
+                text: token.text,
+            },
+            value: expression,
+        });
+
+        if (!matchToken(input, state, TokenKind.Comma)) {
+            break;
+        }
+    }
+
+    return {
+        kind: AstNodeKind.Set,
+        args,
+    };
+};
+
+const parseNewBody = (input: Token[][], state: ParserState): NewAstNode | undefined => {
+    const args: IdentifierAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const token = matchToken(input, state, TokenKind.Identifier);
+
+        if (!token) {
+            return;
+        }
+
+        args.push({
+            kind: AstNodeKind.Identifier,
+            text: token.text,
+        });
+
+        if (!matchToken(input, state, TokenKind.Comma)) {
+            break;
+        }
+    }
+
+    return {
+        kind: AstNodeKind.New,
+        args,
+    };
+};
+
 const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
     let nameToken = matchToken(input, state, TokenKind.Identifier);
 
@@ -535,29 +628,24 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
 
     let node: CommandAstNode | undefined;
 
-    // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
-    switch (nameToken.text.toLowerCase()) {
-        case "w":
-        case "write":
-            node = parseWriteBody(input, state);
-            break;
-        case "q":
-        case "quit":
-            node = parseQuitBody(input, state);
-            break;
-        case "d":
-        case "do":
-            node = parseDoBody(input, state);
-            break;
-        case "i":
-        case "if":
-            node = parseIfBody(input, state);
-            break;
-        default:
-            reportError("Unrecognized command name", state);
-            break;
-    }
+    const lowerCaseName = nameToken.text.toLowerCase();
 
+    // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
+    if ("write".startsWith(lowerCaseName)) {
+        node = parseWriteBody(input, state);
+    } else if ("quit".startsWith(lowerCaseName)) {
+        node = parseQuitBody(input, state);
+    } else if ("do".startsWith(lowerCaseName)) {
+        node = parseDoBody(input, state);
+    } else if ("if".startsWith(lowerCaseName)) {
+        node = parseIfBody(input, state);
+    } else if ("set".startsWith(lowerCaseName)) {
+        node = parseSetBody(input, state);
+    } else if ("new".startsWith(lowerCaseName)) {
+        node = parseNewBody(input, state);
+    } else {
+        reportError("Unrecognized command name", state);
+    }
     if (!node) {
         return;
     }
