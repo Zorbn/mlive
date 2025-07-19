@@ -25,6 +25,10 @@ main
     . w !,"This will be executed"
     . q
     . w !,"And this won't"
+    i 1,1,0 d  w !,"This is false"
+    . w !,"Hi from within condition 1"
+    i 1,1,1 d  w !,"This is true"
+    . w !,"Hi from within condition 2"
     w !,"Done with main!"
     q
 
@@ -36,8 +40,7 @@ myOtherFunction()
     q 777
 
 identity(x)
-    q x
-    `;
+    q x`;
 
 const handleErrors = (errors: MError[]) => {
     if (errors.length === 0) {

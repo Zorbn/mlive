@@ -7,6 +7,7 @@ export const enum AstNodeKind {
     Quit,
     Do,
     DoBlock,
+    If,
     Identifier,
     NumberLiteral,
     StringLiteral,
@@ -44,7 +45,13 @@ export interface DoBlockAstNode {
     children: CommandAstNode[];
 }
 
-export type CommandAstNode = WriteAstNode | QuitAstNode | CallAstNode | DoBlockAstNode;
+export interface IfAstNode {
+    kind: AstNodeKind.If;
+    conditions: ExpressionAstNode[];
+    children: CommandAstNode[];
+}
+
+export type CommandAstNode = WriteAstNode | QuitAstNode | CallAstNode | DoBlockAstNode | IfAstNode;
 
 export type ExpressionAstNode =
     | IdentifierAstNode
@@ -473,6 +480,46 @@ const parseDoBody = (
     };
 };
 
+const parseIfBody = (input: Token[][], state: ParserState): IfAstNode | undefined => {
+    const conditions: ExpressionAstNode[] = [];
+    const children: CommandAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const expression = parseExpression(input, state);
+
+        if (!expression) {
+            return;
+        }
+
+        conditions.push(expression);
+
+        if (!matchToken(input, state, TokenKind.Comma)) {
+            if (!matchWhitespace(input, state)) {
+                reportError("Expected space after if conditions", state);
+                return;
+            }
+
+            break;
+        }
+    }
+
+    while (!matchWhitespace(input, state)) {
+        const command = parseCommand(input, state);
+
+        if (!command) {
+            return;
+        }
+
+        children.push(command);
+    }
+
+    return {
+        kind: AstNodeKind.If,
+        conditions,
+        children,
+    };
+};
+
 const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
     let nameToken = matchToken(input, state, TokenKind.Identifier);
 
@@ -501,6 +548,10 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         case "d":
         case "do":
             node = parseDoBody(input, state);
+            break;
+        case "i":
+        case "if":
+            node = parseIfBody(input, state);
             break;
         default:
             reportError("Unrecognized command name", state);

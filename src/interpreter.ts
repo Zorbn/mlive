@@ -7,6 +7,7 @@ import {
     CommandAstNode,
     DoBlockAstNode,
     ExpressionAstNode,
+    IfAstNode,
     QuitAstNode,
     TopLevelAstNode,
     WriteAstNode,
@@ -14,8 +15,6 @@ import {
 import { Token, TokenKind } from "./tokenizer.js";
 
 // TODO: Most important/unique things to interpret right now:
-// if: controls the whole rest of the line like for,
-// unary/binary ops: simple precedence (unary ops before binary ops, left to right),
 // negation of operators: '< means >=,
 // builtins like $O: $O(array("subscript")),
 
@@ -57,6 +56,17 @@ const lookupVariable = (name: string, state: InterpreterState): MValue => {
 
         if (value !== undefined) {
             return value;
+        }
+    }
+
+    return "";
+};
+
+const setVariable = (name: string, value: MValue, state: InterpreterState) => {
+    for (let i = state.environmentStack.length - 1; i >= 0; i--) {
+        if (i === 0 || state.environmentStack[i].has(name)) {
+            state.environmentStack[i].set(name, value);
+            break;
         }
     }
 
@@ -221,6 +231,31 @@ const interpretDoBlock = (node: DoBlockAstNode, state: InterpreterState): boolea
     return true;
 };
 
+const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult => {
+    for (const condition of node.conditions) {
+        if (!interpretExpression(condition, state)) {
+            return CommandResult.Halt;
+        }
+
+        if (mValueToNumber(state.valueStack.pop()!) === 0) {
+            setVariable("$TEST", 0, state);
+            return CommandResult.Continue;
+        }
+    }
+
+    setVariable("$TEST", 1, state);
+
+    for (const command of node.children) {
+        const result = interpretCommand(command, state);
+
+        if (result !== CommandResult.Continue) {
+            return result;
+        }
+    }
+
+    return CommandResult.Continue;
+};
+
 const interpretCommand = (node: CommandAstNode, state: InterpreterState): CommandResult => {
     switch (node.kind) {
         case AstNodeKind.Write:
@@ -229,6 +264,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretQuit(node, state) ? CommandResult.Quit : CommandResult.Halt;
         case AstNodeKind.DoBlock:
             return interpretDoBlock(node, state) ? CommandResult.Continue : CommandResult.Halt;
+        case AstNodeKind.If:
+            return interpretIf(node, state);
         case AstNodeKind.Call:
             return interpretCall(node, state, false) ? CommandResult.Continue : CommandResult.Halt;
         default:
@@ -255,6 +292,8 @@ export const interpret = (ast: TopLevelAstNode) => {
         output: [],
         errors: [],
     };
+
+    setVariable("$TEST", 0, state);
 
     interpretTopLevel(state, ast.tags.get("main")!.index);
 
