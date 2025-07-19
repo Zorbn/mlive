@@ -1,43 +1,38 @@
 import { MError } from "./mError.js";
 import { Token, TokenKind } from "./tokenizer.js";
 
-// TODO: Most important/unique things to parse right now:
-// if: controls the whole rest of the line like for,
-// unary/binary ops: simple precedence (unary ops before binary ops, left to right),
-// negation of operators: '< means >=,
-// builtins like $O: $O(array("subscript")),
-// function calls and subroutine do calls: mostly just useful to make more useful examples when we start interpreting code,
-
 export const enum AstNodeKind {
     TopLevel,
-    Tag,
     Write,
     Quit,
+    Do,
     DoBlock,
     Identifier,
     NumberLiteral,
     StringLiteral,
+    Call,
+    BinaryOp,
+    ExclamationPointFormatter,
+    HashFormatter,
+}
+
+interface Tag {
+    index: number;
+    params: string[] | null;
 }
 
 export interface TopLevelAstNode {
     kind: AstNodeKind.TopLevel;
-    children: TagAstNode[];
-}
-
-export interface TagAstNode {
-    kind: AstNodeKind.Tag;
-    // Any commands that occur before explicit tag definitions
-    // are put in an implicit tag with the name "".
-    name: string;
+    tags: Map<string, Tag>;
     children: CommandAstNode[];
-    // Tags with an empty parameter list are called differently from tags with no parameter list.
-    params?: IdentifierAstNode[];
 }
 
 export interface WriteAstNode {
     kind: AstNodeKind.Write;
-    args: ExpressionAstNode[];
+    args: WriteArgumentAstNode[];
 }
+
+export type WriteArgumentAstNode = ExpressionAstNode | ExclamationFormatter | HashFormatter;
 
 export interface QuitAstNode {
     kind: AstNodeKind.Quit;
@@ -49,9 +44,14 @@ export interface DoBlockAstNode {
     children: CommandAstNode[];
 }
 
-export type CommandAstNode = WriteAstNode | QuitAstNode | DoBlockAstNode;
+export type CommandAstNode = WriteAstNode | QuitAstNode | CallAstNode | DoBlockAstNode;
 
-export type ExpressionAstNode = IdentifierAstNode | NumberLiteralAstNode | StringLiteralAstNode;
+export type ExpressionAstNode =
+    | IdentifierAstNode
+    | NumberLiteralAstNode
+    | StringLiteralAstNode
+    | CallAstNode
+    | BinaryOpAstNode;
 
 export interface IdentifierAstNode {
     kind: AstNodeKind.Identifier;
@@ -68,9 +68,34 @@ export interface StringLiteralAstNode {
     value: string;
 }
 
+export interface CallAstNode {
+    kind: AstNodeKind.Call;
+    name: IdentifierAstNode;
+    args: ExpressionAstNode[];
+}
+
+export const enum BinaryOp {
+    Plus,
+    Minus,
+}
+
+export interface BinaryOpAstNode {
+    kind: AstNodeKind.BinaryOp;
+    left: ExpressionAstNode;
+    right: ExpressionAstNode;
+    op: BinaryOp;
+}
+
+export interface ExclamationFormatter {
+    kind: AstNodeKind.ExclamationPointFormatter;
+}
+
+export interface HashFormatter {
+    kind: AstNodeKind.HashFormatter;
+}
+
 export type AstNode =
     | TopLevelAstNode
-    | TagAstNode
     | CommandAstNode
     | DoBlockAstNode
     | ExpressionAstNode
@@ -78,26 +103,43 @@ export type AstNode =
     | NumberLiteralAstNode
     | StringLiteralAstNode;
 
-interface ParsePosition {
+interface ParserPosition {
     line: number;
     column: number;
     nextUnparsedLine: number;
 }
 
-const moveToNextUnparsedLine = (position: ParsePosition) => {
-    position.column = 0;
-    position.line = position.nextUnparsedLine;
-    position.nextUnparsedLine += 1;
+interface ParserState {
+    position: ParserPosition;
+    // The number of dots before each line (in addition to leading whitespace).
+    indentationLevel: number;
+    errors: MError[];
+}
+
+const makeParserPosition = (): ParserPosition => ({
+    line: 0,
+    column: 0,
+    nextUnparsedLine: 1,
+});
+
+const moveToNextUnparsedLine = (state: ParserState) => {
+    jumpToLine(state.position.nextUnparsedLine, state);
 };
 
-const getToken = (input: Token[][], position: ParsePosition) =>
-    input[position.line][position.column];
+const jumpToLine = (line: number, state: ParserState) => {
+    state.position.column = 0;
+    state.position.line = line;
+    state.position.nextUnparsedLine = line + 1;
+};
 
-const nextToken = (input: Token[][], position: ParsePosition) => {
-    const token = getToken(input, position);
+const getToken = (input: Token[][], state: ParserState) =>
+    input[state.position.line][state.position.column];
+
+const nextToken = (input: Token[][], state: ParserState) => {
+    const token = getToken(input, state);
 
     if (token.kind !== TokenKind.TrailingWhitespace) {
-        position.column += 1;
+        state.position.column += 1;
     }
 
     return token;
@@ -105,30 +147,30 @@ const nextToken = (input: Token[][], position: ParsePosition) => {
 
 const matchToken = <K extends TokenKind, T extends Token & { kind: K }>(
     input: Token[][],
-    position: ParsePosition,
+    state: ParserState,
     validKind: K,
 ): T | undefined => {
-    const token = getToken(input, position);
+    const token = getToken(input, state);
 
     if (token.kind !== validKind) {
         return;
     }
 
-    return nextToken(input, position) as T;
+    return nextToken(input, state) as T;
 };
 
-const matchWhitespace = (input: Token[][], position: ParsePosition): boolean => {
-    if (!getWhitespace(input, position)) {
+const matchWhitespace = (input: Token[][], state: ParserState): boolean => {
+    if (!getWhitespace(input, state)) {
         return false;
     }
 
-    nextToken(input, position);
+    nextToken(input, state);
 
     return true;
 };
 
-const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
-    const token = getToken(input, position);
+const getWhitespace = (input: Token[][], state: ParserState): boolean => {
+    const token = getToken(input, state);
 
     return (
         token.kind === TokenKind.Space ||
@@ -137,137 +179,242 @@ const getWhitespace = (input: Token[][], position: ParsePosition): boolean => {
     );
 };
 
-const reportError = (errors: MError[], message: string, position: ParsePosition) => {
-    console.log(message, position);
-    errors.push({
+const reportError = (message: string, state: ParserState) => {
+    console.log(message, state);
+    state.errors.push({
         message,
-        line: position.line,
+        line: state.position.line,
         // TODO: The column here is actually the index of the token. We should store the real column of each token so it can be reported here.
-        column: position.column,
+        column: state.position.column,
     });
 };
 
-const parseExpression = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-): ExpressionAstNode | undefined => {
-    const token = getToken(input, position);
+const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefined => {
+    const nameToken = getToken(input, state);
 
-    let node: ExpressionAstNode | undefined;
+    if (nameToken.kind != TokenKind.Identifier) {
+        reportError("Expected an identifier", state);
+        return;
+    }
 
-    switch (token.kind) {
+    nextToken(input, state);
+
+    const args = [];
+
+    if (matchToken(input, state, TokenKind.LeftParen)) {
+        for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
+            const expression = parseExpression(input, state);
+
+            if (!expression) {
+                break;
+            }
+
+            args.push(expression);
+
+            if (!matchToken(input, state, TokenKind.Comma)) {
+                break;
+            }
+        }
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated argument list", state);
+            return;
+        }
+    }
+
+    return {
+        kind: AstNodeKind.Call,
+        name: {
+            kind: AstNodeKind.Identifier,
+            text: nameToken.text,
+        },
+        args,
+    };
+};
+
+const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
+    if (firstToken.kind == TokenKind.Dollar) {
+        nextToken(input, state);
+
+        if (!matchToken(input, state, TokenKind.Dollar)) {
+            reportError("Builtins are not supported yet", state);
+            return;
+        }
+
+        return parseCall(input, state);
+    }
+
+    let node: ExpressionAstNode;
+
+    switch (firstToken.kind) {
         case TokenKind.String:
             node = {
                 kind: AstNodeKind.StringLiteral,
-                value: token.value,
+                value: firstToken.value,
             };
             break;
         case TokenKind.Number:
             node = {
                 kind: AstNodeKind.NumberLiteral,
-                value: token.value,
+                value: firstToken.value,
             };
             break;
         case TokenKind.Identifier:
             node = {
                 kind: AstNodeKind.Identifier,
-                text: token.text,
+                text: firstToken.text,
             };
             break;
         default:
-            reportError(errors, "Expected an expression", position);
+            reportError("Expected an expression", state);
             return;
     }
 
-    nextToken(input, position);
+    nextToken(input, state);
 
     return node;
 };
 
+const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
+    let left = parsePrimary(input, state);
+
+    if (!left) {
+        return;
+    }
+
+    while (true) {
+        const token = getToken(input, state);
+        let isBinaryOp = true;
+
+        switch (token.kind) {
+            case TokenKind.Plus:
+            case TokenKind.Minus:
+                break;
+            default:
+                isBinaryOp = false;
+                break;
+        }
+
+        if (!isBinaryOp) {
+            break;
+        }
+
+        nextToken(input, state);
+
+        const right = parsePrimary(input, state);
+
+        if (!right) {
+            return;
+        }
+
+        let op: BinaryOp;
+
+        switch (token.kind) {
+            case TokenKind.Plus:
+                op = BinaryOp.Plus;
+                break;
+            case TokenKind.Minus:
+                op = BinaryOp.Minus;
+                break;
+            default:
+                reportError("Unimplemented binary op", state);
+                return;
+        }
+
+        left = {
+            kind: AstNodeKind.BinaryOp,
+            left,
+            right,
+            op,
+        };
+    }
+
+    return left;
+};
+
 const parseBlock = (
     input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-    // The number of dots before each line (in addition to leading whitespace).
-    indentationLevel: number,
+    state: ParserState,
     startOnNextLine: boolean,
-): CommandAstNode[] => {
-    const commands: CommandAstNode[] = [];
+): CommandAstNode[] | undefined => {
+    const commands = [];
 
     while (true) {
         while (
-            position.line < input.length &&
-            (startOnNextLine || getToken(input, position).kind === TokenKind.TrailingWhitespace)
+            state.position.line < input.length &&
+            (startOnNextLine || getToken(input, state).kind === TokenKind.TrailingWhitespace)
         ) {
-            moveToNextUnparsedLine(position);
+            moveToNextUnparsedLine(state);
             startOnNextLine = false;
 
-            if (position.line >= input.length) {
+            if (state.position.line >= input.length) {
                 return commands;
             }
 
-            const startColumn = position.column;
+            const startColumn = state.position.column;
 
-            let didBlockEnd = !matchToken(input, position, TokenKind.LeadingWhitespace);
+            let didBlockEnd = !matchToken(input, state, TokenKind.LeadingWhitespace);
 
             if (!didBlockEnd) {
-                for (let i = 0; i < indentationLevel; i++) {
-                    if (!matchToken(input, position, TokenKind.Dot)) {
+                for (let i = 0; i < state.indentationLevel; i++) {
+                    if (!matchToken(input, state, TokenKind.Dot)) {
                         didBlockEnd = true;
                         break;
                     }
 
-                    if (!matchToken(input, position, TokenKind.Space)) {
-                        reportError(errors, "Expected space after dot", position);
+                    if (!matchToken(input, state, TokenKind.Space)) {
+                        reportError("Expected space after dot", state);
+                        return;
                     }
                 }
             }
 
             if (didBlockEnd) {
-                position.column = startColumn;
+                state.position.column = startColumn;
                 return commands;
             }
         }
 
-        const command = parseCommand(input, position, errors, indentationLevel);
+        const command = parseCommand(input, state);
 
         if (!command) {
-            break;
+            return;
         }
 
         commands.push(command);
     }
-
-    return commands;
 };
 
-const parseWriteBody = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-): WriteAstNode | undefined => {
-    // TODO: Support formatting with #, ?, and !.
+const parseWriteBody = (input: Token[][], state: ParserState): WriteAstNode | undefined => {
+    // TODO: Support formatting with ?.
+    const args: WriteArgumentAstNode[] = [];
 
-    const args: ExpressionAstNode[] = [];
+    while (!matchWhitespace(input, state)) {
+        const token = getToken(input, state);
 
-    if (getWhitespace(input, position)) {
-        return {
-            kind: AstNodeKind.Write,
-            args,
-        };
-    }
+        switch (token.kind) {
+            case TokenKind.Hash:
+                nextToken(input, state);
+                args.push({ kind: AstNodeKind.HashFormatter });
+                break;
+            case TokenKind.ExclamationPoint:
+                nextToken(input, state);
+                args.push({ kind: AstNodeKind.ExclamationPointFormatter });
+                break;
+            default:
+                const expression = parseExpression(input, state);
 
-    while (true) {
-        const expression = parseExpression(input, position, errors);
+                if (!expression) {
+                    return;
+                }
 
-        if (!expression) {
-            break;
+                args.push(expression);
+                break;
         }
 
-        args.push(expression);
-
-        if (!matchToken(input, position, TokenKind.Comma)) {
+        if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
     }
@@ -278,65 +425,65 @@ const parseWriteBody = (
     };
 };
 
-const parseQuitBody = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-): QuitAstNode | undefined => {
-    if (getWhitespace(input, position)) {
+const parseQuitBody = (input: Token[][], state: ParserState): QuitAstNode | undefined => {
+    if (getWhitespace(input, state)) {
         return {
             kind: AstNodeKind.Quit,
         };
     }
 
-    return {
-        kind: AstNodeKind.Quit,
-        returnValue: parseExpression(input, position, errors),
-    };
-};
+    const returnValue = parseExpression(input, state);
 
-const parseDoBlockBody = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-    indentationLevel: number,
-): DoBlockAstNode | undefined => {
-    if (!getWhitespace(input, position)) {
-        // TODO: If there are arguments the "do" command should not be interpreted as a block in the first place.
-        reportError(errors, "Expected no arguments for do block", position);
+    if (!returnValue) {
         return;
     }
 
-    const startLine = position.line;
-    const startColumn = position.column;
+    return {
+        kind: AstNodeKind.Quit,
+        returnValue,
+    };
+};
 
-    const children = parseBlock(input, position, errors, indentationLevel + 1, true);
+const parseDoBody = (
+    input: Token[][],
+    state: ParserState,
+): CallAstNode | DoBlockAstNode | undefined => {
+    if (!getWhitespace(input, state)) {
+        return parseCall(input, state);
+    }
 
-    position.nextUnparsedLine = position.line;
-    position.line = startLine;
-    position.column = startColumn;
+    const startLine = state.position.line;
+    const startColumn = state.position.column;
+
+    state.indentationLevel++;
+    const block = parseBlock(input, state, true);
+    state.indentationLevel--;
+
+    if (!block) {
+        return;
+    }
+
+    state.position.nextUnparsedLine = state.position.line;
+    state.position.line = startLine;
+    state.position.column = startColumn;
 
     return {
         kind: AstNodeKind.DoBlock,
-        children,
+        children: block,
     };
 };
 
-const parseCommand = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-    indentationLevel: number,
-): CommandAstNode | undefined => {
-    let nameToken = matchToken(input, position, TokenKind.Identifier);
+const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
+    let nameToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!nameToken) {
-        reportError(errors, "Expected command name", position);
+        reportError("Expected command name", state);
         return;
     }
 
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space between command and arguments", position);
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space between command and arguments", state);
+        return;
     }
 
     let node: CommandAstNode | undefined;
@@ -345,110 +492,125 @@ const parseCommand = (
     switch (nameToken.text.toLowerCase()) {
         case "w":
         case "write":
-            node = parseWriteBody(input, position, errors);
+            node = parseWriteBody(input, state);
             break;
         case "q":
         case "quit":
-            node = parseQuitBody(input, position, errors);
+            node = parseQuitBody(input, state);
             break;
         case "d":
         case "do":
-            // TODO: This could also be a subroutine call instead of a block.
-            node = parseDoBlockBody(input, position, errors, indentationLevel);
+            node = parseDoBody(input, state);
             break;
         default:
-            reportError(errors, "Unrecognized command name", position);
-            return;
+            reportError("Unrecognized command name", state);
+            break;
     }
 
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space between arguments and next commands", position);
+    if (!node) {
+        return;
+    }
+
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space between arguments and next commands", state);
+        return;
     }
 
     return node;
 };
 
-const parseTag = (
-    input: Token[][],
-    position: ParsePosition,
-    errors: MError[],
-): TagAstNode | undefined => {
-    let name = "";
-    let params: IdentifierAstNode[] | undefined;
+const parseTag = (input: Token[][], state: ParserState): string[] | null | undefined => {
+    let params: string[] | null = null;
 
-    const firstToken = getToken(input, position);
+    if (getToken(input, state).kind === TokenKind.LeftParen) {
+        nextToken(input, state);
 
-    if (firstToken.kind === TokenKind.Identifier) {
-        name = firstToken.text;
-        nextToken(input, position);
+        params = [];
 
-        if (getToken(input, position).kind === TokenKind.LeftParen) {
-            nextToken(input, position);
+        for (let i = 0; ; i++) {
+            let paramToken = matchToken(input, state, TokenKind.Identifier);
 
-            params = [];
-
-            for (let i = 0; ; i++) {
-                let paramToken = matchToken(input, position, TokenKind.Identifier);
-
-                if (!paramToken) {
-                    if (i > 0) {
-                        reportError(errors, "Expected parameter name", position);
-                    }
-
-                    break;
+            if (!paramToken) {
+                if (i > 0) {
+                    reportError("Expected parameter name", state);
                 }
 
-                params.push({
-                    kind: AstNodeKind.Identifier,
-                    text: paramToken.text,
-                });
-
-                if (nextToken(input, position).kind !== TokenKind.Comma) {
-                    break;
-                }
+                break;
             }
 
-            if (!matchToken(input, position, TokenKind.RightParen)) {
-                reportError(errors, "Unterminated parameter list", position);
+            params.push(paramToken.text);
+
+            if (!matchToken(input, state, TokenKind.Comma)) {
+                break;
             }
+        }
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated parameter list", state);
+            return;
         }
     }
 
-    if (!matchWhitespace(input, position)) {
-        reportError(errors, "Expected space after tag name", position);
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected space after tag name", state);
         return;
     }
 
-    const children = parseBlock(input, position, errors, 0, false);
-
-    return {
-        name,
-        kind: AstNodeKind.Tag,
-        children,
-        params,
-    };
+    return params;
 };
 
-export const parse = (input: Token[][]) => {
-    const errors: MError[] = [];
-    const position = { line: 0, column: 0, nextUnparsedLine: 1 };
-    const ast: TopLevelAstNode = {
+const parseTopLevel = (input: Token[][], state: ParserState): TopLevelAstNode | undefined => {
+    const topLevel: TopLevelAstNode = {
         kind: AstNodeKind.TopLevel,
+        tags: new Map(),
         children: [],
     };
 
-    while (position.line < input.length) {
-        const tag = parseTag(input, position, errors);
+    while (state.position.line < input.length) {
+        const firstToken = getToken(input, state);
 
-        if (!tag) {
-            break;
+        if (firstToken.kind === TokenKind.Identifier) {
+            nextToken(input, state);
+
+            const name = firstToken.text;
+            const params = parseTag(input, state);
+
+            if (params === undefined) {
+                return;
+            }
+
+            if (!topLevel.tags.has(name)) {
+                topLevel.tags.set(name, {
+                    index: topLevel.children.length,
+                    params,
+                });
+            }
+        } else if (!matchWhitespace(input, state)) {
+            reportError("Expected leading space", state);
+            return;
         }
 
-        ast.children.push(tag);
+        const block = parseBlock(input, state, false);
+
+        if (!block) {
+            return;
+        }
+
+        topLevel.children.push(...block);
     }
 
+    return topLevel;
+};
+
+export const parse = (input: Token[][]) => {
+    const state = {
+        position: makeParserPosition(),
+        indentationLevel: 0,
+        errors: [],
+    };
+
     return {
-        ast,
-        errors,
+        ast: parseTopLevel(input, state),
+        errors: state.errors,
     };
 };

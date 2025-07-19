@@ -1,6 +1,7 @@
 import { tokenize } from "./tokenizer.js";
 import { MError } from "./mError.js";
 import { interpret } from "./interpreter.js";
+import { parse } from "./parser.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
@@ -59,7 +60,15 @@ const evaluate = (script: string) => {
 
     console.log(tokenizeResult.tokenizedLines);
 
-    const interpretResult = interpret(tokenizeResult.tokenizedLines);
+    const parseResult = parse(tokenizeResult.tokenizedLines);
+
+    if (handleErrors(parseResult.errors) || !parseResult.ast) {
+        return;
+    }
+
+    console.log(parseResult.ast);
+
+    const interpretResult = interpret(parseResult.ast);
 
     if (handleErrors(interpretResult.errors)) {
         return;
