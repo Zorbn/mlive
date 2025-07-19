@@ -12,6 +12,7 @@ export const enum AstNodeKind {
     Set,
     New,
     Identifier,
+    Variable,
     NumberLiteral,
     StringLiteral,
     Call,
@@ -56,7 +57,7 @@ export interface IfAstNode {
 
 export interface SetArgumentAstNode {
     kind: AstNodeKind.SetArgument;
-    name: IdentifierAstNode;
+    variable: VariableAstNode;
     value: ExpressionAstNode;
 }
 
@@ -80,7 +81,7 @@ export type CommandAstNode =
     | NewAstNode;
 
 export type ExpressionAstNode =
-    | IdentifierAstNode
+    | VariableAstNode
     | NumberLiteralAstNode
     | StringLiteralAstNode
     | CallAstNode
@@ -89,6 +90,12 @@ export type ExpressionAstNode =
 export interface IdentifierAstNode {
     kind: AstNodeKind.Identifier;
     text: string;
+}
+
+export interface VariableAstNode {
+    kind: AstNodeKind.Variable;
+    name: IdentifierAstNode;
+    subscripts: ExpressionAstNode[];
 }
 
 export interface NumberLiteralAstNode {
@@ -222,16 +229,7 @@ const reportError = (message: string, state: ParserState) => {
     });
 };
 
-const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefined => {
-    const nameToken = getToken(input, state);
-
-    if (nameToken.kind != TokenKind.Identifier) {
-        reportError("Expected an identifier", state);
-        return;
-    }
-
-    nextToken(input, state);
-
+const parseArgs = (input: Token[][], state: ParserState): ExpressionAstNode[] | undefined => {
     const args = [];
 
     if (matchToken(input, state, TokenKind.LeftParen)) {
@@ -255,6 +253,25 @@ const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefine
         }
     }
 
+    return args;
+};
+
+const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefined => {
+    const nameToken = getToken(input, state);
+
+    if (nameToken.kind != TokenKind.Identifier) {
+        reportError("Expected an identifier", state);
+        return;
+    }
+
+    nextToken(input, state);
+
+    const args = parseArgs(input, state);
+
+    if (!args) {
+        return;
+    }
+
     return {
         kind: AstNodeKind.Call,
         name: {
@@ -262,6 +279,30 @@ const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefine
             text: nameToken.text,
         },
         args,
+    };
+};
+
+const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | undefined => {
+    const firstToken = matchToken(input, state, TokenKind.Identifier);
+
+    if (!firstToken) {
+        reportError("Expected variable to start with an identifier", state);
+        return;
+    }
+
+    const args = parseArgs(input, state);
+
+    if (!args) {
+        return;
+    }
+
+    return {
+        kind: AstNodeKind.Variable,
+        name: {
+            kind: AstNodeKind.Identifier,
+            text: firstToken.text,
+        },
+        subscripts: args,
     };
 };
 
@@ -279,35 +320,27 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
         return parseCall(input, state);
     }
 
-    let node: ExpressionAstNode;
-
     switch (firstToken.kind) {
         case TokenKind.String:
-            node = {
+            nextToken(input, state);
+
+            return {
                 kind: AstNodeKind.StringLiteral,
                 value: firstToken.value,
             };
-            break;
         case TokenKind.Number:
-            node = {
+            nextToken(input, state);
+
+            return {
                 kind: AstNodeKind.NumberLiteral,
                 value: firstToken.value,
             };
-            break;
         case TokenKind.Identifier:
-            node = {
-                kind: AstNodeKind.Identifier,
-                text: firstToken.text,
-            };
-            break;
+            return parseVariable(input, state);
         default:
             reportError("Expected an expression", state);
             return;
     }
-
-    nextToken(input, state);
-
-    return node;
 };
 
 const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
@@ -550,9 +583,9 @@ const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefi
     const args: SetArgumentAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
-        const token = matchToken(input, state, TokenKind.Identifier);
+        const variable = parseVariable(input, state);
 
-        if (!token) {
+        if (!variable) {
             return;
         }
 
@@ -569,10 +602,7 @@ const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefi
 
         args.push({
             kind: AstNodeKind.SetArgument,
-            name: {
-                kind: AstNodeKind.Identifier,
-                text: token.text,
-            },
+            variable,
             value: expression,
         });
 

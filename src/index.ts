@@ -12,9 +12,11 @@ inputTextArea.value = `    write !,"hi"
 SCRIPT
     QUIT
 
-main n var1,var2
-    s var1="a",var2="b"
-    w !,"Var1: ",var1,", Var 2: ",var2
+main n var1,var2,varArr
+    s var1="a",var2="b",varArr(1)="a",varArr(2)="b",varArr(3,"hello")="hello there",varArr(3,"hi")="hi there"
+    w !,"Var 1: ",var1,", Var 2: ",var2
+    w !,"VarArr 1: ",varArr(1),", VarArr 2: ",varArr(2)
+    w !,"VarArr 3, Hi: ",varArr(3,"hi"),", VarArr 3, Hello: ",varArr(3,"hello")
     wRIte !,"Hello, world"
     d myOtherFunction()
     w !,"Result of identity on 123 is: """,$$identity(123),"""!!!"

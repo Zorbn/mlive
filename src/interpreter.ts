@@ -1,3 +1,12 @@
+import {
+    MValue,
+    mValueToString,
+    mArrayGet,
+    mValueToNumber,
+    mArraySet,
+    MScalar,
+    MArray,
+} from "./mArray.js";
 import { MError } from "./mError.js";
 import {
     AstNodeKind,
@@ -9,27 +18,16 @@ import {
     IfAstNode,
     NewAstNode,
     QuitAstNode,
+    SetArgumentAstNode,
     SetAstNode,
     TopLevelAstNode,
+    VariableAstNode,
     WriteAstNode,
 } from "./parser.js";
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
 // builtins like $O: $O(array("subscript")),
-
-type MValue = string | number;
-
-const mValueToNumber = (value: MValue): number => {
-    if (typeof value === "string") {
-        // TODO: Implement accurate conversion.
-        const number = parseFloat(value);
-
-        return isNaN(number) ? 0 : number;
-    }
-
-    return value;
-};
 
 interface InterpreterState {
     ast: TopLevelAstNode;
@@ -45,27 +43,26 @@ const enum CommandResult {
     Halt,
 }
 
-const lookupVariable = (name: string, state: InterpreterState): MValue => {
+const getEnvironmentForVariable = (name: string, state: InterpreterState) => {
     for (let i = state.environmentStack.length - 1; i >= 0; i--) {
-        const value = state.environmentStack[i].get(name);
-
-        if (value !== undefined) {
-            return value;
+        if (state.environmentStack[i].has(name)) {
+            return state.environmentStack[i];
         }
     }
 
-    return "";
+    return state.environmentStack[0];
+};
+
+const lookupVariable = (name: string, state: InterpreterState): MValue => {
+    const environment = getEnvironmentForVariable(name, state);
+
+    return environment.get(name) ?? "";
 };
 
 const setVariable = (name: string, value: MValue, state: InterpreterState) => {
-    for (let i = state.environmentStack.length - 1; i >= 0; i--) {
-        if (i === 0 || state.environmentStack[i].has(name)) {
-            state.environmentStack[i].set(name, value);
-            break;
-        }
-    }
+    const environment = getEnvironmentForVariable(name, state);
 
-    return "";
+    environment.set(name, value);
 };
 
 const reportError = (message: string, state: InterpreterState) => {
@@ -128,11 +125,49 @@ const interpretCall = (
     return true;
 };
 
+const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState): boolean => {
+    const name = node.name.text;
+    const environment = getEnvironmentForVariable(name, state);
+
+    let value = environment.get(name);
+
+    if (!value) {
+        state.valueStack.push("");
+        return true;
+    }
+
+    for (let i = 0; i < node.subscripts.length; i++) {
+        if (typeof value !== "object") {
+            state.valueStack.push("");
+            return true;
+        }
+
+        const subscript = interpretExpression(node.subscripts[i], state);
+
+        if (!subscript) {
+            return false;
+        }
+
+        const subscriptKey = mValueToString(state.valueStack.pop()!);
+        value = mArrayGet(value, subscriptKey);
+
+        if (!value) {
+            state.valueStack.push("");
+            return true;
+        }
+    }
+
+    state.valueStack.push(value);
+    return true;
+};
+
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
-        case AstNodeKind.Identifier: {
-            const value = lookupVariable(node.text, state);
-            state.valueStack.push(value);
+        case AstNodeKind.Variable: {
+            if (!interpretVariableLookup(node, state)) {
+                return false;
+            }
+
             break;
         }
         case AstNodeKind.NumberLiteral:
@@ -255,26 +290,104 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
     return CommandResult.Continue;
 };
 
-const interpretSet = (node: SetAstNode, state: InterpreterState): CommandResult => {
-    for (const arg of node.args) {
-        if (!interpretExpression(arg.value, state)) {
+const interpretVariableSetArgument = (
+    node: SetArgumentAstNode,
+    state: InterpreterState,
+): CommandResult => {
+    if (!interpretExpression(node.value, state)) {
+        return CommandResult.Halt;
+    }
+
+    const name = node.variable.name.text;
+    const environment = getEnvironmentForVariable(name, state);
+
+    if (node.variable.subscripts.length === 0) {
+        environment.set(name, state.valueStack.pop()!);
+        return CommandResult.Continue;
+    }
+
+    let array = environment.get(name);
+
+    if (!array) {
+        array = {
+            value: "",
+        };
+
+        environment.set(name, array);
+    } else if (typeof array !== "object") {
+        array = {
+            value: array,
+        };
+
+        environment.set(name, array);
+    }
+
+    for (let i = 0; i < node.variable.subscripts.length - 1; i++) {
+        const subscript = interpretExpression(node.variable.subscripts[i], state);
+
+        if (!subscript) {
             return CommandResult.Halt;
         }
 
-        setVariable(arg.name.text, state.valueStack.pop()!, state);
+        const subscriptKey = mValueToString(state.valueStack.pop()!);
+        let innerArray = mArrayGet(array, subscriptKey);
+
+        if (!innerArray) {
+            innerArray = {
+                value: "",
+            };
+
+            mArraySet(array, subscriptKey, innerArray);
+        } else if (typeof array !== "object") {
+            innerArray = {
+                value: innerArray as MScalar,
+            };
+
+            mArraySet(array, subscriptKey, innerArray);
+        }
+
+        array = innerArray as MArray;
+    }
+
+    const finalSubscript = interpretExpression(
+        node.variable.subscripts[node.variable.subscripts.length - 1],
+        state,
+    );
+
+    if (!finalSubscript) {
+        return CommandResult.Halt;
+    }
+
+    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
+
+    mArraySet(array, finalSubscriptKey, state.valueStack.pop()!);
+    return CommandResult.Continue;
+};
+
+const interpretSet = (node: SetAstNode, state: InterpreterState): CommandResult => {
+    for (const arg of node.args) {
+        const result = interpretVariableSetArgument(arg, state);
+
+        if (result !== CommandResult.Continue) {
+            return result;
+        }
     }
 
     return CommandResult.Continue;
 };
 
 const interpretNew = (node: NewAstNode, state: InterpreterState): CommandResult => {
-    if (node.args.length > 0) {
-        state.environmentStack.push(new Map());
+    if (node.args.length === 0) {
+        return CommandResult.Continue;
     }
 
+    const environment = new Map();
+
     for (const arg of node.args) {
-        setVariable(arg.text, "", state);
+        environment.set(arg.text, "");
     }
+
+    state.environmentStack.push(environment);
 
     return CommandResult.Continue;
 };
@@ -315,7 +428,7 @@ export const interpret = (ast: TopLevelAstNode) => {
     const state = {
         ast,
         valueStack: [],
-        environmentStack: [],
+        environmentStack: [new Map()],
         output: [],
         errors: [],
     };
