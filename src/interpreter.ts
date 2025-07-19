@@ -174,7 +174,7 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
     return true;
 };
 
-const interpretWrite = (node: WriteAstNode, state: InterpreterState): boolean => {
+const interpretWrite = (node: WriteAstNode, state: InterpreterState): CommandResult => {
     // TODO: Support formatting with ?.
 
     for (const arg of node.args) {
@@ -187,7 +187,7 @@ const interpretWrite = (node: WriteAstNode, state: InterpreterState): boolean =>
                 break;
             default:
                 if (!interpretExpression(arg, state)) {
-                    return false;
+                    return CommandResult.Halt;
                 }
 
                 state.output.push(state.valueStack.pop()!.toString());
@@ -195,18 +195,22 @@ const interpretWrite = (node: WriteAstNode, state: InterpreterState): boolean =>
         }
     }
 
-    return true;
+    return CommandResult.Continue;
 };
 
-const interpretQuit = (node: QuitAstNode, state: InterpreterState): boolean => {
+const interpretQuit = (node: QuitAstNode, state: InterpreterState): CommandResult => {
     if (!node.returnValue) {
-        return true;
+        return CommandResult.Quit;
     }
 
-    return interpretExpression(node.returnValue, state);
+    if (!interpretExpression(node.returnValue, state)) {
+        return CommandResult.Halt;
+    }
+
+    return CommandResult.Quit;
 };
 
-const interpretDoBlock = (node: DoBlockAstNode, state: InterpreterState): boolean => {
+const interpretDoBlock = (node: DoBlockAstNode, state: InterpreterState): CommandResult => {
     const startEnvironmentStackLength = state.environmentStack.length;
 
     for (const command of node.children) {
@@ -216,14 +220,14 @@ const interpretDoBlock = (node: DoBlockAstNode, state: InterpreterState): boolea
             break;
         }
 
-        if (blockResult == CommandResult.Halt) {
-            return false;
+        if (blockResult === CommandResult.Halt) {
+            return blockResult;
         }
     }
 
     state.environmentStack.length = startEnvironmentStackLength;
 
-    return true;
+    return CommandResult.Continue;
 };
 
 const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult => {
@@ -251,19 +255,19 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
     return CommandResult.Continue;
 };
 
-const interpretSet = (node: SetAstNode, state: InterpreterState): boolean => {
+const interpretSet = (node: SetAstNode, state: InterpreterState): CommandResult => {
     for (const arg of node.args) {
         if (!interpretExpression(arg.value, state)) {
-            return false;
+            return CommandResult.Halt;
         }
 
         setVariable(arg.name.text, state.valueStack.pop()!, state);
     }
 
-    return true;
+    return CommandResult.Continue;
 };
 
-const interpretNew = (node: NewAstNode, state: InterpreterState): boolean => {
+const interpretNew = (node: NewAstNode, state: InterpreterState): CommandResult => {
     if (node.args.length > 0) {
         state.environmentStack.push(new Map());
     }
@@ -272,24 +276,23 @@ const interpretNew = (node: NewAstNode, state: InterpreterState): boolean => {
         setVariable(arg.text, "", state);
     }
 
-    return true;
+    return CommandResult.Continue;
 };
 
 const interpretCommand = (node: CommandAstNode, state: InterpreterState): CommandResult => {
-    // TODO: The interpret functions here should all be returning CommandResult instead of some returning bools.
     switch (node.kind) {
         case AstNodeKind.Write:
-            return interpretWrite(node, state) ? CommandResult.Continue : CommandResult.Halt;
+            return interpretWrite(node, state);
         case AstNodeKind.Quit:
-            return interpretQuit(node, state) ? CommandResult.Quit : CommandResult.Halt;
+            return interpretQuit(node, state);
         case AstNodeKind.DoBlock:
-            return interpretDoBlock(node, state) ? CommandResult.Continue : CommandResult.Halt;
+            return interpretDoBlock(node, state);
         case AstNodeKind.If:
             return interpretIf(node, state);
         case AstNodeKind.Set:
-            return interpretSet(node, state) ? CommandResult.Continue : CommandResult.Halt;
+            return interpretSet(node, state);
         case AstNodeKind.New:
-            return interpretNew(node, state) ? CommandResult.Continue : CommandResult.Halt;
+            return interpretNew(node, state);
         case AstNodeKind.Call:
             return interpretCall(node, state, false) ? CommandResult.Continue : CommandResult.Halt;
         default:
