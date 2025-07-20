@@ -29,12 +29,13 @@ import {
     SetArgumentAstNode,
     SetAstNode,
     TopLevelAstNode,
+    UnaryOp,
+    UnaryOpAstNode,
     VariableAstNode,
     WriteAstNode,
 } from "./parser.js";
 
 // TODO: Most important/unique things to interpret right now:
-// unary ops like unary not (')
 // support version of the for command with arguments
 
 type Environment = Map<string, MValue | MReference>;
@@ -203,6 +204,35 @@ const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState)
     return true;
 };
 
+const interpretUnaryOp = (node: UnaryOpAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.right, state)) {
+        return false;
+    }
+
+    const right = state.valueStack.pop()!;
+
+    let value: MValue;
+
+    switch (node.op) {
+        case UnaryOp.Not:
+            value = mValueToNumber(right) === 0 ? 1 : 0;
+            break;
+        case UnaryOp.Plus:
+            value = mValueToNumber(right);
+            break;
+        case UnaryOp.Minus:
+            value = -mValueToNumber(right);
+            break;
+        default:
+            reportError("Unimplemented unary op", state);
+            return false;
+    }
+
+    state.valueStack.push(value);
+
+    return true;
+};
+
 const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): boolean => {
     if (!interpretExpression(node.left, state)) {
         return false;
@@ -318,6 +348,8 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             break;
         case AstNodeKind.Call:
             return interpretCall(node, state, true);
+        case AstNodeKind.UnaryOp:
+            return interpretUnaryOp(node, state);
         case AstNodeKind.BinaryOp:
             return interpretBinaryOp(node, state);
         case AstNodeKind.Order:

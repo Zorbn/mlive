@@ -21,6 +21,7 @@ export const enum AstNodeKind {
     Command,
     Reference,
     BinaryOp,
+    UnaryOp,
     ExclamationPointFormatter,
     HashFormatter,
     Order,
@@ -115,6 +116,7 @@ export type ExpressionAstNode =
     | NumberLiteralAstNode
     | StringLiteralAstNode
     | CallAstNode
+    | UnaryOpAstNode
     | BinaryOpAstNode
     | OrderAstNode;
 
@@ -143,6 +145,18 @@ export interface CallAstNode {
     kind: AstNodeKind.Call;
     name: IdentifierAstNode;
     args: CallArgumentAstNode[];
+}
+
+export const enum UnaryOp {
+    Not,
+    Plus,
+    Minus,
+}
+
+export interface UnaryOpAstNode {
+    kind: AstNodeKind.UnaryOp;
+    right: ExpressionAstNode;
+    op: UnaryOp;
 }
 
 export const enum BinaryOp {
@@ -467,8 +481,43 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
     }
 };
 
+const parseUnaryOp = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
+    const token = getToken(input, state);
+    let op: UnaryOp | undefined;
+
+    switch (token.kind) {
+        case TokenKind.SingleQuote:
+            op = UnaryOp.Not;
+            break;
+        case TokenKind.Minus:
+            op = UnaryOp.Minus;
+            break;
+        case TokenKind.Plus:
+            op = UnaryOp.Plus;
+            break;
+    }
+
+    if (op === undefined) {
+        return parsePrimary(input, state);
+    }
+
+    nextToken(input, state);
+
+    const right = parsePrimary(input, state);
+
+    if (!right) {
+        return;
+    }
+
+    return {
+        kind: AstNodeKind.UnaryOp,
+        right,
+        op,
+    };
+};
+
 const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
-    let left = parsePrimary(input, state);
+    let left = parseUnaryOp(input, state);
 
     if (!left) {
         return;
@@ -513,7 +562,7 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
 
         nextToken(input, state);
 
-        const right = parsePrimary(input, state);
+        const right = parseUnaryOp(input, state);
 
         if (!right) {
             return;
