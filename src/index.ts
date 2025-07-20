@@ -7,6 +7,23 @@ const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaEl
 const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
 
+const insertIntoTextArea = (text: string, textArea: HTMLTextAreaElement) => {
+    const textBefore = textArea.value.slice(0, textArea.selectionStart);
+    const textAfter = textArea.value.slice(textArea.selectionEnd);
+
+    const selectionPosition = textArea.selectionStart + text.length;
+    textArea.value = textBefore + text + textAfter;
+    textArea.selectionStart = textArea.selectionEnd = selectionPosition;
+
+    const event = new InputEvent("input", {
+        bubbles: true,
+        cancelable: true,
+        data: text,
+    });
+
+    textArea.dispatchEvent(event);
+};
+
 // Prevent MacOS "  " -> ". " conversion when typing in the input text area.
 // It's common to need to type two spaces in M code.
 inputTextArea.addEventListener("beforeinput", (event) => {
@@ -17,21 +34,40 @@ inputTextArea.addEventListener("beforeinput", (event) => {
     }
 
     event.preventDefault();
+    insertIntoTextArea("  ", inputTextArea);
+});
 
-    const textBefore = inputTextArea.value.slice(0, inputTextArea.selectionStart);
-    const textAfter = inputTextArea.value.slice(inputTextArea.selectionEnd);
+inputTextArea.addEventListener("keydown", (event) => {
+    if (event.key === "Tab") {
+        event.preventDefault();
+        insertIntoTextArea("    ", inputTextArea);
+        return;
+    }
 
-    const selectionPosition = inputTextArea.selectionStart + 2;
-    inputTextArea.value = textBefore + "  " + textAfter;
-    inputTextArea.selectionStart = inputTextArea.selectionEnd = selectionPosition;
+    if (event.key === "Backspace") {
+        if (
+            inputTextArea.selectionStart !== inputTextArea.selectionEnd ||
+            inputTextArea.selectionStart < 4
+        ) {
+            return;
+        }
 
-    const doubleSpaceEvent = new InputEvent("input", {
-        bubbles: true,
-        cancelable: true,
-        data: "  ",
-    });
+        const indentStart = inputTextArea.selectionStart - 4;
 
-    inputTextArea.dispatchEvent(doubleSpaceEvent);
+        for (let i = indentStart; i < inputTextArea.selectionStart; i++) {
+            if (inputTextArea.value[i] !== " ") {
+                return;
+            }
+        }
+
+        event.preventDefault();
+
+        const textBefore = inputTextArea.value.slice(0, indentStart);
+        const textAfter = inputTextArea.value.slice(inputTextArea.selectionEnd);
+
+        inputTextArea.value = textBefore + textAfter;
+        inputTextArea.selectionStart = inputTextArea.selectionEnd = indentStart;
+    }
 });
 
 inputTextArea.value = `    write !,"hi"
