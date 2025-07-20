@@ -21,6 +21,7 @@ export const enum TokenKind {
     Equals,
     LessThan,
     GreaterThan,
+    SingleQuote,
     Colon,
 }
 
@@ -42,6 +43,7 @@ interface BasicToken {
         | TokenKind.Equals
         | TokenKind.LessThan
         | TokenKind.GreaterThan
+        | TokenKind.SingleQuote
         | TokenKind.Colon;
 }
 
@@ -247,6 +249,11 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case ">":
                 tokens.push({
                     kind: TokenKind.GreaterThan,
+                });
+                break;
+            case "'":
+                tokens.push({
+                    kind: TokenKind.SingleQuote,
                 });
                 break;
             case ":":

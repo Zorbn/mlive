@@ -34,7 +34,7 @@ import {
 } from "./parser.js";
 
 // TODO: Most important/unique things to interpret right now:
-// negation of operators: '< means >=,
+// unary ops like unary not (')
 // support version of the for command with arguments
 
 type Environment = Map<string, MValue | MReference>;
@@ -215,26 +215,34 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     const right = state.valueStack.pop()!;
     const left = state.valueStack.pop()!;
 
+    let value: MValue;
+
     switch (node.op) {
         case BinaryOp.Equals:
-            state.valueStack.push(left === right ? 1 : 0);
+            value = left === right ? 1 : 0;
             break;
         case BinaryOp.LessThan:
-            state.valueStack.push(left < right ? 1 : 0);
+            value = left < right ? 1 : 0;
             break;
         case BinaryOp.GreaterThan:
-            state.valueStack.push(left > right ? 1 : 0);
+            value = left > right ? 1 : 0;
             break;
         case BinaryOp.Plus:
-            state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
+            value = mValueToNumber(left) + mValueToNumber(right);
             break;
         case BinaryOp.Minus:
-            state.valueStack.push(mValueToNumber(left) - mValueToNumber(right));
+            value = mValueToNumber(left) - mValueToNumber(right);
             break;
         default:
             reportError("Unimplemented binary op", state);
-            break;
+            return false;
     }
+
+    if (node.isNegated) {
+        value = value === 0 ? 1 : 0;
+    }
+
+    state.valueStack.push(value);
 
     return true;
 };

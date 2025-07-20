@@ -158,6 +158,7 @@ export interface BinaryOpAstNode {
     left: ExpressionAstNode;
     right: ExpressionAstNode;
     op: BinaryOp;
+    isNegated: boolean;
 }
 
 export interface OrderAstNode {
@@ -474,6 +475,12 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
     }
 
     while (true) {
+        let isNegated = false;
+
+        if (matchToken(input, state, TokenKind.SingleQuote)) {
+            isNegated = true;
+        }
+
         const token = getToken(input, state);
         let op: BinaryOp | undefined;
 
@@ -487,14 +494,17 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
             case TokenKind.GreaterThan:
                 op = BinaryOp.GreaterThan;
                 break;
-            case TokenKind.Plus:
-                op = BinaryOp.Plus;
-                break;
-            case TokenKind.Minus:
-                op = BinaryOp.Minus;
-                break;
-            default:
-                break;
+        }
+
+        if (!isNegated) {
+            switch (token.kind) {
+                case TokenKind.Plus:
+                    op = BinaryOp.Plus;
+                    break;
+                case TokenKind.Minus:
+                    op = BinaryOp.Minus;
+                    break;
+            }
         }
 
         if (op === undefined) {
@@ -514,6 +524,7 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
             left,
             right,
             op,
+            isNegated,
         };
     }
 
