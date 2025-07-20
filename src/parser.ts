@@ -8,6 +8,7 @@ export const enum AstNodeKind {
     Do,
     DoBlock,
     If,
+    For,
     Else,
     SetArgument,
     Set,
@@ -58,6 +59,11 @@ export interface IfAstNode {
     children: CommandAstNode[];
 }
 
+export interface ForAstNode {
+    kind: AstNodeKind.For;
+    children: CommandAstNode[];
+}
+
 export interface ElseAstNode {
     kind: AstNodeKind.Else;
     children: CommandAstNode[];
@@ -86,6 +92,7 @@ export type CommandAstNode =
     | DoBlockAstNode
     | IfAstNode
     | ElseAstNode
+    | ForAstNode
     | SetAstNode
     | NewAstNode;
 
@@ -132,6 +139,7 @@ export interface CallAstNode {
 }
 
 export const enum BinaryOp {
+    Equals,
     Plus,
     Minus,
 }
@@ -458,18 +466,23 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
 
     while (true) {
         const token = getToken(input, state);
-        let isBinaryOp = true;
+        let op: BinaryOp | undefined;
 
         switch (token.kind) {
+            case TokenKind.Equals:
+                op = BinaryOp.Equals;
+                break;
             case TokenKind.Plus:
+                op = BinaryOp.Plus;
+                break;
             case TokenKind.Minus:
+                op = BinaryOp.Minus;
                 break;
             default:
-                isBinaryOp = false;
                 break;
         }
 
-        if (!isBinaryOp) {
+        if (op === undefined) {
             break;
         }
 
@@ -479,20 +492,6 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
 
         if (!right) {
             return;
-        }
-
-        let op: BinaryOp;
-
-        switch (token.kind) {
-            case TokenKind.Plus:
-                op = BinaryOp.Plus;
-                break;
-            case TokenKind.Minus:
-                op = BinaryOp.Minus;
-                break;
-            default:
-                reportError("Unimplemented binary op", state);
-                return;
         }
 
         left = {
@@ -709,6 +708,31 @@ const parseElseBody = (input: Token[][], state: ParserState): ElseAstNode | unde
     };
 };
 
+const parseForBody = (input: Token[][], state: ParserState): ForAstNode | undefined => {
+    if (!matchWhitespace(input, state)) {
+        // TODO:
+        reportError("For commands with arguments are not supported yet", state);
+        return;
+    }
+
+    const children: CommandAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const command = parseCommand(input, state);
+
+        if (!command) {
+            return;
+        }
+
+        children.push(command);
+    }
+
+    return {
+        kind: AstNodeKind.For,
+        children,
+    };
+};
+
 const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefined => {
     const args: SetArgumentAstNode[] = [];
 
@@ -801,6 +825,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         node = parseIfBody(input, state);
     } else if ("else".startsWith(lowerCaseName)) {
         node = parseElseBody(input, state);
+    } else if ("for".startsWith(lowerCaseName)) {
+        node = parseForBody(input, state);
     } else if ("set".startsWith(lowerCaseName)) {
         node = parseSetBody(input, state);
     } else if ("new".startsWith(lowerCaseName)) {

@@ -14,6 +14,7 @@ SCRIPT
 
 main n var1,var2,varArr
     s var1="a",var2="b",varArr(1)="a",varArr(2)="b",varArr(3,"hello")="hello there",varArr(3,"hi")="hi there"
+    d printArrayKeys(.varArr)
     d printArray1and2(varArr)
     d printArray1and2(.varArr)
     w !,"Var 1: ",var1,", Var 2: ",var2
@@ -61,6 +62,11 @@ myFunction()
 myOtherFunction()
     w !,"In the other function"
     q 777
+
+printArrayKeys(array)
+    n key
+    f  s key=$O(array(key)) w !,"Key: ",key i key="" q
+    q
 
 identity(x)
     q x`;

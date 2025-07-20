@@ -21,6 +21,7 @@ import {
     DoBlockAstNode,
     ElseAstNode,
     ExpressionAstNode,
+    ForAstNode,
     IfAstNode,
     NewAstNode,
     OrderAstNode,
@@ -34,6 +35,9 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
+// support version of the for command with arguments
+// it should be an error to use "" as a subscript
+// add post conditions
 
 type Environment = Map<string, MValue | MReference>;
 
@@ -214,6 +218,9 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     const left = state.valueStack.pop()!;
 
     switch (node.op) {
+        case BinaryOp.Equals:
+            state.valueStack.push(left === right ? 1 : 0);
+            break;
         case BinaryOp.Plus:
             state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
             break;
@@ -407,6 +414,22 @@ const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResul
     return CommandResult.Continue;
 };
 
+const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult => {
+    while (true) {
+        for (const command of node.children) {
+            const result = interpretCommand(command, state);
+
+            if (result === CommandResult.Halt) {
+                return result;
+            }
+
+            if (result === CommandResult.Quit) {
+                return CommandResult.Continue;
+            }
+        }
+    }
+};
+
 const interpretVariableSetArgument = (
     node: SetArgumentAstNode,
     state: InterpreterState,
@@ -525,6 +548,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretIf(node, state);
         case AstNodeKind.Else:
             return interpretElse(node, state);
+        case AstNodeKind.For:
+            return interpretFor(node, state);
         case AstNodeKind.Set:
             return interpretSet(node, state);
         case AstNodeKind.New:
