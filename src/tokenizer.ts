@@ -19,6 +19,8 @@ export const enum TokenKind {
     Minus,
     ExclamationPoint,
     Equals,
+    LessThan,
+    GreaterThan,
     Colon,
 }
 
@@ -38,6 +40,8 @@ interface BasicToken {
         | TokenKind.Minus
         | TokenKind.ExclamationPoint
         | TokenKind.Equals
+        | TokenKind.LessThan
+        | TokenKind.GreaterThan
         | TokenKind.Colon;
 }
 
@@ -233,6 +237,16 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "=":
                 tokens.push({
                     kind: TokenKind.Equals,
+                });
+                break;
+            case "<":
+                tokens.push({
+                    kind: TokenKind.LessThan,
+                });
+                break;
+            case ">":
+                tokens.push({
+                    kind: TokenKind.GreaterThan,
                 });
                 break;
             case ":":

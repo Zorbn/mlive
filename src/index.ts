@@ -44,30 +44,32 @@ inputTextArea.addEventListener("keydown", (event) => {
         return;
     }
 
-    if (event.key === "Backspace") {
-        if (
-            inputTextArea.selectionStart !== inputTextArea.selectionEnd ||
-            inputTextArea.selectionStart < 4
-        ) {
+    if (event.key !== "Backspace") {
+        return;
+    }
+
+    if (
+        inputTextArea.selectionStart !== inputTextArea.selectionEnd ||
+        inputTextArea.selectionStart < 4
+    ) {
+        return;
+    }
+
+    const indentStart = inputTextArea.selectionStart - 4;
+
+    for (let i = indentStart; i < inputTextArea.selectionStart; i++) {
+        if (inputTextArea.value[i] !== " ") {
             return;
         }
-
-        const indentStart = inputTextArea.selectionStart - 4;
-
-        for (let i = indentStart; i < inputTextArea.selectionStart; i++) {
-            if (inputTextArea.value[i] !== " ") {
-                return;
-            }
-        }
-
-        event.preventDefault();
-
-        const textBefore = inputTextArea.value.slice(0, indentStart);
-        const textAfter = inputTextArea.value.slice(inputTextArea.selectionEnd);
-
-        inputTextArea.value = textBefore + textAfter;
-        inputTextArea.selectionStart = inputTextArea.selectionEnd = indentStart;
     }
+
+    event.preventDefault();
+
+    const textBefore = inputTextArea.value.slice(0, indentStart);
+    const textAfter = inputTextArea.value.slice(inputTextArea.selectionEnd);
+
+    inputTextArea.value = textBefore + textAfter;
+    inputTextArea.selectionStart = inputTextArea.selectionEnd = indentStart;
 });
 
 inputTextArea.value = `    write !,"hi"
@@ -101,10 +103,10 @@ main n var1,var2,varArr
     . w !,"This will be executed"
     . q
     . w !,"And this won't"
-    i 1,1,0 d  w !,"The first condition is true"
+    i 100=100,1,3<2 d  w !,"The first condition is true"
     . w !,"Hi from within condition 1"
     e  w !,"The first condition is false"
-    i 1,1,1 d  w !,"The second condition is true"
+    i 77=77,430>123,1 d  w !,"The second condition is true"
     . w !,"Hi from within condition 2"
     e  w !,"The second condition is false"
     w !,"Done with main!"

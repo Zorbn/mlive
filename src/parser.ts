@@ -147,6 +147,8 @@ export interface CallAstNode {
 
 export const enum BinaryOp {
     Equals,
+    LessThan,
+    GreaterThan,
     Plus,
     Minus,
 }
@@ -478,6 +480,12 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
         switch (token.kind) {
             case TokenKind.Equals:
                 op = BinaryOp.Equals;
+                break;
+            case TokenKind.LessThan:
+                op = BinaryOp.LessThan;
+                break;
+            case TokenKind.GreaterThan:
+                op = BinaryOp.GreaterThan;
                 break;
             case TokenKind.Plus:
                 op = BinaryOp.Plus;

@@ -36,7 +36,6 @@ import {
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
 // support version of the for command with arguments
-// it should be an error to use "" as a subscript
 
 type Environment = Map<string, MValue | MReference>;
 
@@ -219,6 +218,12 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     switch (node.op) {
         case BinaryOp.Equals:
             state.valueStack.push(left === right ? 1 : 0);
+            break;
+        case BinaryOp.LessThan:
+            state.valueStack.push(left < right ? 1 : 0);
+            break;
+        case BinaryOp.GreaterThan:
+            state.valueStack.push(left > right ? 1 : 0);
             break;
         case BinaryOp.Plus:
             state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
