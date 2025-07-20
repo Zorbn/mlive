@@ -6,17 +6,20 @@ import {
     mArraySet,
     MScalar,
     MArray,
+    mArrayGetNextKey,
 } from "./mArray.js";
 import { MError } from "./mError.js";
 import {
     AstNodeKind,
     BinaryOp,
+    BinaryOpAstNode,
     CallAstNode,
     CommandAstNode,
     DoBlockAstNode,
     ExpressionAstNode,
     IfAstNode,
     NewAstNode,
+    OrderAstNode,
     QuitAstNode,
     SetArgumentAstNode,
     SetAstNode,
@@ -27,7 +30,6 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
-// builtins like $O: $O(array("subscript")),
 
 interface InterpreterState {
     ast: TopLevelAstNode;
@@ -161,6 +163,87 @@ const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState)
     return true;
 };
 
+const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.left, state)) {
+        return false;
+    }
+
+    if (!interpretExpression(node.right, state)) {
+        return false;
+    }
+
+    const right = state.valueStack.pop()!;
+    const left = state.valueStack.pop()!;
+
+    switch (node.op) {
+        case BinaryOp.Plus:
+            state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
+            break;
+        case BinaryOp.Minus:
+            state.valueStack.push(mValueToNumber(left) - mValueToNumber(right));
+            break;
+        default:
+            reportError("Unimplemented binary op", state);
+            break;
+    }
+
+    return true;
+};
+
+const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean => {
+    const name = node.variable.name.text;
+    const environment = getEnvironmentForVariable(name, state);
+
+    let value = environment.get(name);
+
+    if (!value || node.variable.subscripts.length === 0) {
+        state.valueStack.push("");
+        return true;
+    }
+
+    // TODO: Find a way to consolidate the multiple places where we need to look up or set variables with subscripts.
+    for (let i = 0; i < node.variable.subscripts.length - 1; i++) {
+        if (typeof value !== "object") {
+            state.valueStack.push("");
+            return true;
+        }
+
+        const subscript = interpretExpression(node.variable.subscripts[i], state);
+
+        if (!subscript) {
+            return false;
+        }
+
+        const subscriptKey = mValueToString(state.valueStack.pop()!);
+        value = mArrayGet(value, subscriptKey);
+
+        if (!value) {
+            state.valueStack.push("");
+            return true;
+        }
+    }
+
+    if (typeof value !== "object") {
+        state.valueStack.push("");
+        return true;
+    }
+
+    const finalSubscript = interpretExpression(
+        node.variable.subscripts[node.variable.subscripts.length - 1],
+        state,
+    );
+
+    if (!finalSubscript) {
+        return false;
+    }
+
+    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
+    const nextKey = mArrayGetNextKey(value, finalSubscriptKey);
+
+    state.valueStack.push(nextKey);
+    return true;
+};
+
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
@@ -178,32 +261,10 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             break;
         case AstNodeKind.Call:
             return interpretCall(node, state, true);
-        case AstNodeKind.BinaryOp: {
-            if (!interpretExpression(node.left, state)) {
-                return false;
-            }
-
-            if (!interpretExpression(node.right, state)) {
-                return false;
-            }
-
-            const right = state.valueStack.pop()!;
-            const left = state.valueStack.pop()!;
-
-            switch (node.op) {
-                case BinaryOp.Plus:
-                    state.valueStack.push(mValueToNumber(left) + mValueToNumber(right));
-                    break;
-                case BinaryOp.Minus:
-                    state.valueStack.push(mValueToNumber(left) - mValueToNumber(right));
-                    break;
-                default:
-                    reportError("Unimplemented binary op", state);
-                    break;
-            }
-
-            break;
-        }
+        case AstNodeKind.BinaryOp:
+            return interpretBinaryOp(node, state);
+        case AstNodeKind.Order:
+            return interpretOrder(node, state);
     }
 
     return true;

@@ -17,6 +17,8 @@ main n var1,var2,varArr
     w !,"Var 1: ",var1,", Var 2: ",var2
     w !,"VarArr 1: ",varArr(1),", VarArr 2: ",varArr(2)
     w !,"VarArr 3, Hi: ",varArr(3,"hi"),", VarArr 3, Hello: ",varArr(3,"hello")
+    w !,"After VarArr(1) is VarArr(",$O(varArr(1)),")"
+    w !,"After VarArr(3, ""hello"") is VarArr(""",$O(varArr(3,"hello")),""")"
     wRIte !,"Hello, world"
     d myOtherFunction()
     w !,"Result of identity on 123 is: """,$$identity(123),"""!!!"

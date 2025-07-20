@@ -19,6 +19,7 @@ export const enum AstNodeKind {
     BinaryOp,
     ExclamationPointFormatter,
     HashFormatter,
+    Order,
 }
 
 interface Tag {
@@ -85,7 +86,8 @@ export type ExpressionAstNode =
     | NumberLiteralAstNode
     | StringLiteralAstNode
     | CallAstNode
-    | BinaryOpAstNode;
+    | BinaryOpAstNode
+    | OrderAstNode;
 
 export interface IdentifierAstNode {
     kind: AstNodeKind.Identifier;
@@ -124,6 +126,11 @@ export interface BinaryOpAstNode {
     left: ExpressionAstNode;
     right: ExpressionAstNode;
     op: BinaryOp;
+}
+
+export interface OrderAstNode {
+    kind: AstNodeKind.Order;
+    variable: VariableAstNode;
 }
 
 export interface ExclamationFormatter {
@@ -306,15 +313,55 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
     };
 };
 
+const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
+    const builtinName = matchToken(input, state, TokenKind.Identifier);
+
+    if (!builtinName) {
+        reportError("Expected builtin name", state);
+        return;
+    }
+
+    if (!matchToken(input, state, TokenKind.LeftParen)) {
+        reportError("Expected argument list after builtin name", state);
+        return;
+    }
+
+    const lowerCaseBuiltinName = builtinName.text.toLowerCase();
+
+    let node: ExpressionAstNode;
+
+    if ("order".startsWith(lowerCaseBuiltinName)) {
+        const variable = parseVariable(input, state);
+
+        if (!variable) {
+            return;
+        }
+
+        node = {
+            kind: AstNodeKind.Order,
+            variable,
+        };
+    } else {
+        reportError("Unrecognized builtin", state);
+        return;
+    }
+
+    if (!matchToken(input, state, TokenKind.RightParen)) {
+        reportError("Unterminated argument list", state);
+        return;
+    }
+
+    return node;
+};
+
 const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
     const firstToken = getToken(input, state);
 
-    if (firstToken.kind == TokenKind.Dollar) {
+    if (firstToken.kind === TokenKind.Dollar) {
         nextToken(input, state);
 
         if (!matchToken(input, state, TokenKind.Dollar)) {
-            reportError("Builtins are not supported yet", state);
-            return;
+            return parseBuiltin(input, state);
         }
 
         return parseCall(input, state);

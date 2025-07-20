@@ -91,3 +91,18 @@ export const mArrayGet = (array: MArray, key: string) => {
         }
     }
 };
+
+export const mArrayGetNextKey = (array: MArray, key: string) => {
+    if (!array.children) {
+        return "";
+    }
+
+    // TODO: This could use a binary search because keys are sorted.
+    for (const pair of array.children) {
+        if (key < pair.key) {
+            return pair.key;
+        }
+    }
+
+    return "";
+};
