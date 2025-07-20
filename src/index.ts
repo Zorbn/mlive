@@ -14,6 +14,12 @@ SCRIPT
 
 main n var1,var2,varArr
     s var1="a",var2="b",varArr(1)="a",varArr(2)="b",varArr(3,"hello")="hello there",varArr(3,"hi")="hi there"
+    d printArray1(varArr)
+    d printArray1(.varArr)
+    w !,"Var 1: ",var1,", Var 2: ",var2
+    d updateVars(.var1,var2)
+    w !,"Var 1: ",var1,", Var 2: ",var2
+    d updateVars(var1,.var2)
     w !,"Var 1: ",var1,", Var 2: ",var2
     w !,"VarArr 1: ",varArr(1),", VarArr 2: ",varArr(2)
     w !,"VarArr 3, Hi: ",varArr(3,"hi"),", VarArr 3, Hello: ",varArr(3,"hello")
@@ -36,6 +42,13 @@ main n var1,var2,varArr
     i 1,1,1 d  w !,"This is true"
     . w !,"Hi from within condition 2"
     w !,"Done with main!"
+    q
+
+printArray1(array) w !,"Array 1: ",array(1) q
+
+updateVars(firstVar,secondVar)
+    s firstVar="updated a"
+    s secondVar="update b"
     q
 
 myFunction()

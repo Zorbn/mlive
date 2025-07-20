@@ -33,7 +33,6 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
-// pass by reference vs pass by value (especially important for arrays which are currently passed incorrectly),
 
 type Environment = Map<string, MValue | MReference>;
 
@@ -118,9 +117,18 @@ const interpretCall = (
     let didPushEnvironment = false;
 
     if (tag.params) {
-        for (let i = 0; i < tag.params.length; i++) {
-            if (!interpretExpression(node.args[i], state)) {
-                break;
+        for (let i = 0; i < Math.min(tag.params.length, node.args.length); i++) {
+            const arg = node.args[i];
+            let argValue: MValue | MReference;
+
+            if (arg.kind === AstNodeKind.Reference) {
+                argValue = getVariableReference(arg.name.text, state);
+            } else {
+                if (!interpretExpression(arg, state)) {
+                    return false;
+                }
+
+                argValue = state.valueStack.pop()!;
             }
 
             if (!didPushEnvironment) {
@@ -128,10 +136,11 @@ const interpretCall = (
                 didPushEnvironment = true;
             }
 
-            state.environmentStack[state.environmentStack.length - 1].set(
-                tag.params[i],
-                state.valueStack.pop()!,
-            );
+            state.environmentStack[state.environmentStack.length - 1].set(tag.params[i], argValue);
+        }
+
+        for (let i = node.args.length; i < tag.params.length; i++) {
+            state.environmentStack[state.environmentStack.length - 1].set(tag.params[i], "");
         }
     }
 

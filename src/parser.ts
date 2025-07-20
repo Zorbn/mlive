@@ -16,6 +16,7 @@ export const enum AstNodeKind {
     NumberLiteral,
     StringLiteral,
     Call,
+    Reference,
     BinaryOp,
     ExclamationPointFormatter,
     HashFormatter,
@@ -81,6 +82,13 @@ export type CommandAstNode =
     | SetAstNode
     | NewAstNode;
 
+export interface ReferenceAstNode {
+    kind: AstNodeKind.Reference;
+    name: IdentifierAstNode;
+}
+
+export type CallArgumentAstNode = ReferenceAstNode | ExpressionAstNode;
+
 export type ExpressionAstNode =
     | VariableAstNode
     | NumberLiteralAstNode
@@ -113,7 +121,7 @@ export interface StringLiteralAstNode {
 export interface CallAstNode {
     kind: AstNodeKind.Call;
     name: IdentifierAstNode;
-    args: ExpressionAstNode[];
+    args: CallArgumentAstNode[];
 }
 
 export const enum BinaryOp {
@@ -236,7 +244,51 @@ const reportError = (message: string, state: ParserState) => {
     });
 };
 
-const parseArgs = (input: Token[][], state: ParserState): ExpressionAstNode[] | undefined => {
+const parseArgs = (input: Token[][], state: ParserState): CallArgumentAstNode[] | undefined => {
+    const args: CallArgumentAstNode[] = [];
+
+    if (matchToken(input, state, TokenKind.LeftParen)) {
+        for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
+            if (matchToken(input, state, TokenKind.Dot)) {
+                const name = matchToken(input, state, TokenKind.Identifier);
+
+                if (!name) {
+                    reportError("Expected variable name to reference", state);
+                    return;
+                }
+
+                args.push({
+                    kind: AstNodeKind.Reference,
+                    name: {
+                        kind: AstNodeKind.Identifier,
+                        text: name.text,
+                    },
+                });
+            } else {
+                const expression = parseExpression(input, state);
+
+                if (!expression) {
+                    break;
+                }
+
+                args.push(expression);
+            }
+
+            if (!matchToken(input, state, TokenKind.Comma)) {
+                break;
+            }
+        }
+
+        if (!matchToken(input, state, TokenKind.RightParen)) {
+            reportError("Unterminated argument list", state);
+            return;
+        }
+    }
+
+    return args;
+};
+
+const parseSubscripts = (input: Token[][], state: ParserState): ExpressionAstNode[] | undefined => {
     const args = [];
 
     if (matchToken(input, state, TokenKind.LeftParen)) {
@@ -255,7 +307,7 @@ const parseArgs = (input: Token[][], state: ParserState): ExpressionAstNode[] | 
         }
 
         if (!matchToken(input, state, TokenKind.RightParen)) {
-            reportError("Unterminated argument list", state);
+            reportError("Unterminated subscript list", state);
             return;
         }
     }
@@ -297,9 +349,9 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
         return;
     }
 
-    const args = parseArgs(input, state);
+    const subscripts = parseSubscripts(input, state);
 
-    if (!args) {
+    if (!subscripts) {
         return;
     }
 
@@ -309,7 +361,7 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
             kind: AstNodeKind.Identifier,
             text: firstToken.text,
         },
-        subscripts: args,
+        subscripts: subscripts,
     };
 };
 
