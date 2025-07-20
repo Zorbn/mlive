@@ -3,9 +3,21 @@ interface MArrayKeyValuePair {
     value: MValue;
 }
 
+export const enum MObjectKind {
+    Array,
+    Reference,
+}
+
 export interface MArray {
+    kind: MObjectKind.Array;
     value: MScalar;
     children?: MArrayKeyValuePair[];
+}
+
+export interface MReference {
+    kind: MObjectKind.Reference;
+    environmentIndex: number;
+    name: string;
 }
 
 export type MScalar = string | number;

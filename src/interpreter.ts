@@ -7,6 +7,9 @@ import {
     MScalar,
     MArray,
     mArrayGetNextKey,
+    mValueToScalar,
+    MReference,
+    MObjectKind,
 } from "./mArray.js";
 import { MError } from "./mError.js";
 import {
@@ -30,11 +33,14 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // negation of operators: '< means >=,
+// pass by reference vs pass by value (especially important for arrays which are currently passed incorrectly),
+
+type Environment = Map<string, MValue | MReference>;
 
 interface InterpreterState {
     ast: TopLevelAstNode;
-    valueStack: MValue[];
-    environmentStack: Map<string, MValue>[];
+    valueStack: MScalar[];
+    environmentStack: Environment[];
     output: string[];
     errors: MError[];
 }
@@ -45,26 +51,46 @@ const enum CommandResult {
     Halt,
 }
 
-const getEnvironmentForVariable = (name: string, state: InterpreterState) => {
+const getVariableReference = (name: string, state: InterpreterState): MReference => {
     for (let i = state.environmentStack.length - 1; i >= 0; i--) {
-        if (state.environmentStack[i].has(name)) {
-            return state.environmentStack[i];
+        const variable = state.environmentStack[i].get(name);
+
+        if (!variable) {
+            continue;
         }
+
+        if (typeof variable === "object" && variable.kind === MObjectKind.Reference) {
+            return variable;
+        }
+
+        return {
+            kind: MObjectKind.Reference,
+            environmentIndex: i,
+            name,
+        };
     }
 
-    return state.environmentStack[0];
+    return {
+        kind: MObjectKind.Reference,
+        environmentIndex: 0,
+        name,
+    };
 };
 
-const lookupVariable = (name: string, state: InterpreterState): MValue => {
-    const environment = getEnvironmentForVariable(name, state);
+const getReferenceValue = (reference: MReference, state: InterpreterState): MValue | undefined => {
+    return state.environmentStack[reference.environmentIndex].get(reference.name) as
+        | MValue
+        | undefined;
+};
 
-    return environment.get(name) ?? "";
+const setReferenceValue = (reference: MReference, value: MValue, state: InterpreterState) => {
+    return state.environmentStack[reference.environmentIndex].set(reference.name, value);
 };
 
 const setVariable = (name: string, value: MValue, state: InterpreterState) => {
-    const environment = getEnvironmentForVariable(name, state);
+    const reference = getVariableReference(name, state);
 
-    environment.set(name, value);
+    setReferenceValue(reference, value, state);
 };
 
 const reportError = (message: string, state: InterpreterState) => {
@@ -129,9 +155,9 @@ const interpretCall = (
 
 const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState): boolean => {
     const name = node.name.text;
-    const environment = getEnvironmentForVariable(name, state);
+    const reference = getVariableReference(name, state);
 
-    let value = environment.get(name);
+    let value = getReferenceValue(reference, state);
 
     if (!value) {
         state.valueStack.push("");
@@ -159,7 +185,7 @@ const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState)
         }
     }
 
-    state.valueStack.push(value);
+    state.valueStack.push(mValueToScalar(value));
     return true;
 };
 
@@ -192,9 +218,9 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
 
 const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean => {
     const name = node.variable.name.text;
-    const environment = getEnvironmentForVariable(name, state);
+    const reference = getVariableReference(name, state);
 
-    let value = environment.get(name);
+    let value = getReferenceValue(reference, state);
 
     if (!value || node.variable.subscripts.length === 0) {
         state.valueStack.push("");
@@ -360,27 +386,29 @@ const interpretVariableSetArgument = (
     }
 
     const name = node.variable.name.text;
-    const environment = getEnvironmentForVariable(name, state);
+    const reference = getVariableReference(name, state);
 
     if (node.variable.subscripts.length === 0) {
-        environment.set(name, state.valueStack.pop()!);
+        setReferenceValue(reference, state.valueStack.pop()!, state);
         return CommandResult.Continue;
     }
 
-    let array = environment.get(name);
+    let array = getReferenceValue(reference, state);
 
     if (!array) {
         array = {
+            kind: MObjectKind.Array,
             value: "",
         };
 
-        environment.set(name, array);
+        setReferenceValue(reference, array, state);
     } else if (typeof array !== "object") {
         array = {
+            kind: MObjectKind.Array,
             value: array,
         };
 
-        environment.set(name, array);
+        setReferenceValue(reference, array, state);
     }
 
     for (let i = 0; i < node.variable.subscripts.length - 1; i++) {
@@ -395,12 +423,14 @@ const interpretVariableSetArgument = (
 
         if (!innerArray) {
             innerArray = {
+                kind: MObjectKind.Array,
                 value: "",
             };
 
             mArraySet(array, subscriptKey, innerArray);
         } else if (typeof array !== "object") {
             innerArray = {
+                kind: MObjectKind.Array,
                 value: innerArray as MScalar,
             };
 
