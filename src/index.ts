@@ -7,6 +7,33 @@ const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaEl
 const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
 
+// Prevent MacOS "  " -> ". " conversion when typing in the input text area.
+// It's common to need to type two spaces in M code.
+inputTextArea.addEventListener("beforeinput", (event) => {
+    const inputEvent = event as InputEvent;
+
+    if (inputEvent.data !== ". ") {
+        return;
+    }
+
+    event.preventDefault();
+
+    const textBefore = inputTextArea.value.slice(0, inputTextArea.selectionStart);
+    const textAfter = inputTextArea.value.slice(inputTextArea.selectionEnd);
+
+    const selectionPosition = inputTextArea.selectionStart + 2;
+    inputTextArea.value = textBefore + "  " + textAfter;
+    inputTextArea.selectionStart = inputTextArea.selectionEnd = selectionPosition;
+
+    const doubleSpaceEvent = new InputEvent("input", {
+        bubbles: true,
+        cancelable: true,
+        data: "  ",
+    });
+
+    inputTextArea.dispatchEvent(doubleSpaceEvent);
+});
+
 inputTextArea.value = `    write !,"hi"
 
 SCRIPT
