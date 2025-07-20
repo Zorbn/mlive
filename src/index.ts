@@ -165,14 +165,16 @@ const evaluate = (script: string) => {
 
     console.log(parseResult.ast);
 
+    const start = performance.now();
     const interpretResult = interpret(parseResult.ast);
+    const end = performance.now();
 
     if (handleErrors(interpretResult.errors)) {
         return;
     }
 
     outputTextArea.value = interpretResult.output;
-    console.log("Evaluation completed successfully!");
+    console.log(`Evaluation completed successfully in ${end - start}ms!`);
 };
 
 evaluateButton.addEventListener("click", () => {

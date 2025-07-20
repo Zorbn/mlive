@@ -607,7 +607,7 @@ export const interpret = (ast: TopLevelAstNode) => {
 
     setSpecialVariable("$TEST", 0, state);
 
-    interpretTopLevel(state, ast.tags.get("main")!.index);
+    interpretTopLevel(state, ast.tags.get("main")?.index ?? 0);
 
     return {
         output: state.output.join(""),
