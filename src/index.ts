@@ -65,7 +65,7 @@ myOtherFunction()
 
 printArrayKeys(array)
     n key
-    f  s key=$O(array(key)) w !,"Key: ",key i key="" q
+    f  s key=$O(array(key)) q:key=""  w !,"Key: ",key
     q
 
 identity(x)

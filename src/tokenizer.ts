@@ -19,6 +19,7 @@ export const enum TokenKind {
     Minus,
     ExclamationPoint,
     Equals,
+    Colon,
 }
 
 interface BasicToken {
@@ -36,7 +37,8 @@ interface BasicToken {
         | TokenKind.Plus
         | TokenKind.Minus
         | TokenKind.ExclamationPoint
-        | TokenKind.Equals;
+        | TokenKind.Equals
+        | TokenKind.Colon;
 }
 
 interface IdentifierToken {
@@ -172,6 +174,7 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
 
                 continue;
             }
+            // TODO: Collapse all of these similar cases.
             case " ":
                 tokens.push({
                     kind: TokenKind.Space,
@@ -230,6 +233,11 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "=":
                 tokens.push({
                     kind: TokenKind.Equals,
+                });
+                break;
+            case ":":
+                tokens.push({
+                    kind: TokenKind.Colon,
                 });
                 break;
             default:

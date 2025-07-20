@@ -18,6 +18,7 @@ export const enum AstNodeKind {
     NumberLiteral,
     StringLiteral,
     Call,
+    Command,
     Reference,
     BinaryOp,
     ExclamationPointFormatter,
@@ -85,7 +86,7 @@ export interface NewAstNode {
     args: IdentifierAstNode[];
 }
 
-export type CommandAstNode =
+export type CommandBodyAstNode =
     | WriteAstNode
     | QuitAstNode
     | CallAstNode
@@ -95,6 +96,12 @@ export type CommandAstNode =
     | ForAstNode
     | SetAstNode
     | NewAstNode;
+
+export interface CommandAstNode {
+    kind: AstNodeKind.Command;
+    condition?: ExpressionAstNode;
+    body: CommandBodyAstNode;
+}
 
 export interface ReferenceAstNode {
     kind: AstNodeKind.Reference;
@@ -558,7 +565,7 @@ const parseBlock = (
     }
 };
 
-const parseWriteBody = (input: Token[][], state: ParserState): WriteAstNode | undefined => {
+const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefined => {
     // TODO: Support formatting with ?.
     const args: WriteArgumentAstNode[] = [];
 
@@ -596,7 +603,7 @@ const parseWriteBody = (input: Token[][], state: ParserState): WriteAstNode | un
     };
 };
 
-const parseQuitBody = (input: Token[][], state: ParserState): QuitAstNode | undefined => {
+const parseQuit = (input: Token[][], state: ParserState): QuitAstNode | undefined => {
     if (getWhitespace(input, state)) {
         return {
             kind: AstNodeKind.Quit,
@@ -615,7 +622,7 @@ const parseQuitBody = (input: Token[][], state: ParserState): QuitAstNode | unde
     };
 };
 
-const parseDoBody = (
+const parseDo = (
     input: Token[][],
     state: ParserState,
 ): CallAstNode | DoBlockAstNode | undefined => {
@@ -644,7 +651,7 @@ const parseDoBody = (
     };
 };
 
-const parseIfBody = (input: Token[][], state: ParserState): IfAstNode | undefined => {
+const parseIf = (input: Token[][], state: ParserState): IfAstNode | undefined => {
     const conditions: ExpressionAstNode[] = [];
     const children: CommandAstNode[] = [];
 
@@ -684,7 +691,7 @@ const parseIfBody = (input: Token[][], state: ParserState): IfAstNode | undefine
     };
 };
 
-const parseElseBody = (input: Token[][], state: ParserState): ElseAstNode | undefined => {
+const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefined => {
     if (!matchWhitespace(input, state)) {
         reportError("Expected no arguments for else command", state);
         return;
@@ -708,7 +715,7 @@ const parseElseBody = (input: Token[][], state: ParserState): ElseAstNode | unde
     };
 };
 
-const parseForBody = (input: Token[][], state: ParserState): ForAstNode | undefined => {
+const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined => {
     if (!matchWhitespace(input, state)) {
         // TODO:
         reportError("For commands with arguments are not supported yet", state);
@@ -733,7 +740,7 @@ const parseForBody = (input: Token[][], state: ParserState): ForAstNode | undefi
     };
 };
 
-const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefined => {
+const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined => {
     const args: SetArgumentAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
@@ -771,7 +778,7 @@ const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefi
     };
 };
 
-const parseNewBody = (input: Token[][], state: ParserState): NewAstNode | undefined => {
+const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {
     const args: IdentifierAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
@@ -805,36 +812,47 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         return;
     }
 
+    let condition: ExpressionAstNode | undefined;
+
+    if (matchToken(input, state, TokenKind.Colon)) {
+        condition = parseExpression(input, state);
+
+        if (!condition) {
+            return;
+        }
+    }
+
     if (!matchWhitespace(input, state)) {
         reportError("Expected space between command and arguments", state);
         return;
     }
 
-    let node: CommandAstNode | undefined;
+    let body: CommandBodyAstNode | undefined;
 
     const lowerCaseName = nameToken.text.toLowerCase();
 
     // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
     if ("write".startsWith(lowerCaseName)) {
-        node = parseWriteBody(input, state);
+        body = parseWrite(input, state);
     } else if ("quit".startsWith(lowerCaseName)) {
-        node = parseQuitBody(input, state);
+        body = parseQuit(input, state);
     } else if ("do".startsWith(lowerCaseName)) {
-        node = parseDoBody(input, state);
+        body = parseDo(input, state);
     } else if ("if".startsWith(lowerCaseName)) {
-        node = parseIfBody(input, state);
+        body = parseIf(input, state);
     } else if ("else".startsWith(lowerCaseName)) {
-        node = parseElseBody(input, state);
+        body = parseElse(input, state);
     } else if ("for".startsWith(lowerCaseName)) {
-        node = parseForBody(input, state);
+        body = parseFor(input, state);
     } else if ("set".startsWith(lowerCaseName)) {
-        node = parseSetBody(input, state);
+        body = parseSet(input, state);
     } else if ("new".startsWith(lowerCaseName)) {
-        node = parseNewBody(input, state);
+        body = parseNew(input, state);
     } else {
         reportError("Unrecognized command name", state);
     }
-    if (!node) {
+
+    if (!body) {
         return;
     }
 
@@ -843,7 +861,11 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         return;
     }
 
-    return node;
+    return {
+        kind: AstNodeKind.Command,
+        condition,
+        body,
+    };
 };
 
 const parseTag = (input: Token[][], state: ParserState): string[] | null | undefined => {

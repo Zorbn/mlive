@@ -37,7 +37,6 @@ import {
 // negation of operators: '< means >=,
 // support version of the for command with arguments
 // it should be an error to use "" as a subscript
-// add post conditions
 
 type Environment = Map<string, MValue | MReference>;
 
@@ -399,7 +398,7 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
 const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResult => {
     const test = getSpecialVariable("$TEST", state);
 
-    if (test && mValueToNumber(test) === 1) {
+    if (test && mValueToNumber(test) !== 0) {
         return CommandResult.Continue;
     }
 
@@ -537,25 +536,37 @@ const interpretNew = (node: NewAstNode, state: InterpreterState): CommandResult 
 };
 
 const interpretCommand = (node: CommandAstNode, state: InterpreterState): CommandResult => {
-    switch (node.kind) {
+    if (node.condition) {
+        if (!interpretExpression(node.condition, state)) {
+            return CommandResult.Halt;
+        }
+
+        if (mValueToNumber(state.valueStack.pop()!) === 0) {
+            return CommandResult.Continue;
+        }
+    }
+
+    switch (node.body.kind) {
         case AstNodeKind.Write:
-            return interpretWrite(node, state);
+            return interpretWrite(node.body, state);
         case AstNodeKind.Quit:
-            return interpretQuit(node, state);
+            return interpretQuit(node.body, state);
         case AstNodeKind.DoBlock:
-            return interpretDoBlock(node, state);
+            return interpretDoBlock(node.body, state);
         case AstNodeKind.If:
-            return interpretIf(node, state);
+            return interpretIf(node.body, state);
         case AstNodeKind.Else:
-            return interpretElse(node, state);
+            return interpretElse(node.body, state);
         case AstNodeKind.For:
-            return interpretFor(node, state);
+            return interpretFor(node.body, state);
         case AstNodeKind.Set:
-            return interpretSet(node, state);
+            return interpretSet(node.body, state);
         case AstNodeKind.New:
-            return interpretNew(node, state);
+            return interpretNew(node.body, state);
         case AstNodeKind.Call:
-            return interpretCall(node, state, false) ? CommandResult.Continue : CommandResult.Halt;
+            return interpretCall(node.body, state, false)
+                ? CommandResult.Continue
+                : CommandResult.Halt;
         default:
             reportError("Unrecognized command", state);
             return CommandResult.Halt;
