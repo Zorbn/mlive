@@ -14,8 +14,8 @@ SCRIPT
 
 main n var1,var2,varArr
     s var1="a",var2="b",varArr(1)="a",varArr(2)="b",varArr(3,"hello")="hello there",varArr(3,"hi")="hi there"
-    d printArray1(varArr)
-    d printArray1(.varArr)
+    d printArray1and2(varArr)
+    d printArray1and2(.varArr)
     w !,"Var 1: ",var1,", Var 2: ",var2
     d updateVars(.var1,var2)
     w !,"Var 1: ",var1,", Var 2: ",var2
@@ -37,14 +37,18 @@ main n var1,var2,varArr
     . w !,"This will be executed"
     . q
     . w !,"And this won't"
-    i 1,1,0 d  w !,"This is false"
+    i 1,1,0 d  w !,"The first condition is true"
     . w !,"Hi from within condition 1"
-    i 1,1,1 d  w !,"This is true"
+    e  w !,"The first condition is false"
+    i 1,1,1 d  w !,"The second condition is true"
     . w !,"Hi from within condition 2"
+    e  w !,"The second condition is false"
     w !,"Done with main!"
     q
 
-printArray1(array) w !,"Array 1: ",array(1) q
+printArray1and2(array) w !,"Array 1: ",array(1) d printArray2(.array) q
+
+printArray2(array) w !,"Array 2: ",array(2) q
 
 updateVars(firstVar,secondVar)
     s firstVar="updated a"

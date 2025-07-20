@@ -8,6 +8,7 @@ export const enum AstNodeKind {
     Do,
     DoBlock,
     If,
+    Else,
     SetArgument,
     Set,
     New,
@@ -57,6 +58,11 @@ export interface IfAstNode {
     children: CommandAstNode[];
 }
 
+export interface ElseAstNode {
+    kind: AstNodeKind.Else;
+    children: CommandAstNode[];
+}
+
 export interface SetArgumentAstNode {
     kind: AstNodeKind.SetArgument;
     variable: VariableAstNode;
@@ -79,6 +85,7 @@ export type CommandAstNode =
     | CallAstNode
     | DoBlockAstNode
     | IfAstNode
+    | ElseAstNode
     | SetAstNode
     | NewAstNode;
 
@@ -678,6 +685,30 @@ const parseIfBody = (input: Token[][], state: ParserState): IfAstNode | undefine
     };
 };
 
+const parseElseBody = (input: Token[][], state: ParserState): ElseAstNode | undefined => {
+    if (!matchWhitespace(input, state)) {
+        reportError("Expected no arguments for else command", state);
+        return;
+    }
+
+    const children: CommandAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const command = parseCommand(input, state);
+
+        if (!command) {
+            return;
+        }
+
+        children.push(command);
+    }
+
+    return {
+        kind: AstNodeKind.Else,
+        children,
+    };
+};
+
 const parseSetBody = (input: Token[][], state: ParserState): SetAstNode | undefined => {
     const args: SetArgumentAstNode[] = [];
 
@@ -768,6 +799,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         node = parseDoBody(input, state);
     } else if ("if".startsWith(lowerCaseName)) {
         node = parseIfBody(input, state);
+    } else if ("else".startsWith(lowerCaseName)) {
+        node = parseElseBody(input, state);
     } else if ("set".startsWith(lowerCaseName)) {
         node = parseSetBody(input, state);
     } else if ("new".startsWith(lowerCaseName)) {

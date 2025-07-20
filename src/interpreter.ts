@@ -19,6 +19,7 @@ import {
     CallAstNode,
     CommandAstNode,
     DoBlockAstNode,
+    ElseAstNode,
     ExpressionAstNode,
     IfAstNode,
     NewAstNode,
@@ -86,10 +87,12 @@ const setReferenceValue = (reference: MReference, value: MValue, state: Interpre
     return state.environmentStack[reference.environmentIndex].set(reference.name, value);
 };
 
-const setVariable = (name: string, value: MValue, state: InterpreterState) => {
-    const reference = getVariableReference(name, state);
+const getSpecialVariable = (name: string, state: InterpreterState): MValue | undefined => {
+    return state.environmentStack[0].get(name) as MValue | undefined;
+};
 
-    setReferenceValue(reference, value, state);
+const setSpecialVariable = (name: string, value: MValue, state: InterpreterState) => {
+    state.environmentStack[0].set(name, value);
 };
 
 const reportError = (message: string, state: InterpreterState) => {
@@ -368,12 +371,30 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
         }
 
         if (mValueToNumber(state.valueStack.pop()!) === 0) {
-            setVariable("$TEST", 0, state);
+            setSpecialVariable("$TEST", 0, state);
             return CommandResult.Continue;
         }
     }
 
-    setVariable("$TEST", 1, state);
+    setSpecialVariable("$TEST", 1, state);
+
+    for (const command of node.children) {
+        const result = interpretCommand(command, state);
+
+        if (result !== CommandResult.Continue) {
+            return result;
+        }
+    }
+
+    return CommandResult.Continue;
+};
+
+const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResult => {
+    const test = getSpecialVariable("$TEST", state);
+
+    if (test && mValueToNumber(test) === 1) {
+        return CommandResult.Continue;
+    }
 
     for (const command of node.children) {
         const result = interpretCommand(command, state);
@@ -502,6 +523,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretDoBlock(node, state);
         case AstNodeKind.If:
             return interpretIf(node, state);
+        case AstNodeKind.Else:
+            return interpretElse(node, state);
         case AstNodeKind.Set:
             return interpretSet(node, state);
         case AstNodeKind.New:
@@ -533,7 +556,7 @@ export const interpret = (ast: TopLevelAstNode) => {
         errors: [],
     };
 
-    setVariable("$TEST", 0, state);
+    setSpecialVariable("$TEST", 0, state);
 
     interpretTopLevel(state, ast.tags.get("main")!.index);
 
