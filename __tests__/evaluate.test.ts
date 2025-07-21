@@ -127,12 +127,12 @@ Hello, Test`,
     );
 });
 
-// test("comments and blank lines", () => {
-//     expectScript(
-//         `
-//     ; this is a comment
-//     s x=5 w !,x`,
-//         `
-// 5`,
-//     );
-// });
+test("comments", () => {
+    expectScript(
+        `
+    ; this is a comment
+    s x=5 w !,x`,
+        `
+5`,
+    );
+});

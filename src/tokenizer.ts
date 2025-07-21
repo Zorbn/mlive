@@ -106,6 +106,10 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
     while (x < line.length) {
         const firstChar = line[x];
 
+        if (firstChar === ";") {
+            break;
+        }
+
         if (isAlphabetic(firstChar)) {
             const start = x;
 
