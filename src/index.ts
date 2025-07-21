@@ -1,7 +1,5 @@
-import { tokenize } from "./tokenizer.js";
+import { evaluate } from "./evaluate.js";
 import { MError } from "./mError.js";
-import { interpret } from "./interpreter.js";
-import { parse } from "./parser.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
@@ -148,35 +146,15 @@ const handleErrors = (errors: MError[]) => {
     return true;
 };
 
-const evaluate = (script: string) => {
-    const tokenizeResult = tokenize(script);
-
-    if (handleErrors(tokenizeResult.errors)) {
-        return;
-    }
-
-    console.log(tokenizeResult.tokenizedLines);
-
-    const parseResult = parse(tokenizeResult.tokenizedLines);
-
-    if (handleErrors(parseResult.errors) || !parseResult.ast) {
-        return;
-    }
-
-    console.log(parseResult.ast);
-
+evaluateButton.addEventListener("click", () => {
     const start = performance.now();
-    const interpretResult = interpret(parseResult.ast);
+
+    const result = evaluate(inputTextArea.value);
+
     const end = performance.now();
 
-    if (handleErrors(interpretResult.errors)) {
-        return;
+    if (!handleErrors(result.errors)) {
+        console.log(`Evaluation completed successfully in ${end - start}ms!`);
+        outputTextArea.value = result.output;
     }
-
-    outputTextArea.value = interpretResult.output;
-    console.log(`Evaluation completed successfully in ${end - start}ms!`);
-};
-
-evaluateButton.addEventListener("click", () => {
-    evaluate(inputTextArea.value);
 });

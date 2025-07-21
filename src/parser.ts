@@ -274,7 +274,6 @@ const getWhitespace = (input: Token[][], state: ParserState): boolean => {
 };
 
 const reportError = (message: string, state: ParserState) => {
-    console.log(message, state);
     state.errors.push({
         message,
         line: state.position.line,

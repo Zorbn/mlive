@@ -99,7 +99,6 @@ const setSpecialVariable = (name: string, value: MValue, state: InterpreterState
 };
 
 const reportError = (message: string, state: InterpreterState) => {
-    console.log(message, state);
     state.errors.push({
         message,
         // TODO: These values need to be stored in the AST to be available here.
