@@ -1,15 +1,17 @@
-import { evaluate } from "./evaluate.js";
-import { MError } from "./mError.js";
+import test from "node:test";
+import assert from "node:assert";
+import { evaluate } from "../src/evaluate.js";
+import { MError } from "../src/mError.js";
 
 const expectScript = (script: string, output: string, errors?: MError[]) => {
-    expect(evaluate(script)).toEqual({
+    assert.deepStrictEqual(evaluate(script), {
         output,
         errors: errors ?? [],
     });
 };
 
 test("no indent", () => {
-    expectScript("w 1", "", [
+    expectScript(`w 1`, ``, [
         {
             line: 0,
             column: 2,
@@ -19,16 +21,16 @@ test("no indent", () => {
 });
 
 test("print values", () => {
-    expectScript(" w 1", "1");
-    expectScript(` w "one"`, "one");
+    expectScript(` w 1`, `1`);
+    expectScript(` w "one"`, `one`);
 });
 
 test("simple math", () => {
-    expectScript(" w 3+4-3", "4");
+    expectScript(` w 3+4-3`, `4`);
 });
 
 test("math with spaces", () => {
-    expectScript(" w 3 + 4 - 3", "", [
+    expectScript(` w 3 + 4 - 3`, ``, [
         {
             line: 0,
             column: 5,
@@ -49,8 +51,7 @@ main n varArr
 printArrayKeys(array)
     n key
     f  s key=$O(array(key)) q:key=""  w !,"Key: ",key
-    q
-    `,
+    q`,
         `
 After VarArr(3, "hello") is VarArr("hi")
 Key: 1
@@ -82,3 +83,56 @@ Hi from within condition 2
 The second condition is true`,
     );
 });
+
+test("variable assignment and retrieval", () => {
+    expectScript(` s x=42 w !,x`, `\n42`);
+});
+
+test("nested arrays", () => {
+    expectScript(` s arr(1,2)=99 w !,arr(1,2)`, `\n99`);
+});
+
+// test("string concatenation", () => {
+//     expectScript(
+//         ` s a="Hello" s b="World" w !,a_", "_b`,
+//         `
+// Hello, World`,
+//     );
+// });
+
+// test("for loop", () => {
+//     expectScript(
+//         ` f i=1:1:3 w !,"i=",i`,
+//         `
+// i=1
+// i=2
+// i=3`,
+//     );
+// });
+
+test("undefined variable", () => {
+    expectScript(` w !,y`, `\n`);
+});
+
+test("function call with argument", () => {
+    expectScript(
+        `
+    d greet("Test") q
+
+greet(name)
+    w !,"Hello, ",name
+    q`,
+        `
+Hello, Test`,
+    );
+});
+
+// test("comments and blank lines", () => {
+//     expectScript(
+//         `
+//     ; this is a comment
+//     s x=5 w !,x`,
+//         `
+// 5`,
+//     );
+// });
