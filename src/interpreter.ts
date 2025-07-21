@@ -37,6 +37,7 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // support version of the for command with arguments
+// parenthesis for grouping expressions
 
 type Environment = Map<string, MValue | MReference>;
 
