@@ -106,7 +106,7 @@ main n var1,var2,varArr
     i 100=100,1,3'>-2 d  w !,"The first condition is true"
     . w !,"Hi from within condition 1"
     e  w !,"The first condition is false"
-    i 77=77,430>123,'0 d  w !,"The second condition is true"
+    i 77.7=77.7,430>123,'0 d  w !,"The second condition is true"
     . w !,"Hi from within condition 2"
     e  w !,"The second condition is false"
     w !,"Done with main!"

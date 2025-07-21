@@ -125,17 +125,18 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
 
         if (isDigit(firstChar)) {
             const start = x;
+            let hasDot = false;
 
             x++;
 
-            // TODO: Handle decimals.
-            while (x < line.length && isDigit(line[x])) {
+            while (x < line.length && (isDigit(line[x]) || (!hasDot && line[x] === "."))) {
+                hasDot = hasDot || line[x] === ".";
                 x++;
             }
 
             tokens.push({
                 kind: TokenKind.Number,
-                value: Number.parseInt(line.slice(start, x)),
+                value: Number.parseFloat(line.slice(start, x)),
             });
 
             continue;
