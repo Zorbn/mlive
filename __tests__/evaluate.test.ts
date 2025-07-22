@@ -29,6 +29,10 @@ test("simple math", () => {
     expectScript(` w 3+4-3`, `4`);
 });
 
+test("simple math with parenthesis", () => {
+    expectScript(` w 3+-(4-3)`, `2`);
+});
+
 test("math with spaces", () => {
     expectScript(` w 3 + 4 - 3`, ``, [
         {

@@ -474,6 +474,22 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
             };
         case TokenKind.Identifier:
             return parseVariable(input, state);
+        case TokenKind.LeftParen: {
+            nextToken(input, state);
+
+            const expression = parseExpression(input, state);
+
+            if (!expression) {
+                return;
+            }
+
+            if (!matchToken(input, state, TokenKind.RightParen)) {
+                reportError("Unterminated parenthesis", state);
+                return;
+            }
+
+            return expression;
+        }
         default:
             reportError("Expected an expression", state);
             return;
