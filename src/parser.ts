@@ -163,8 +163,11 @@ export const enum BinaryOp {
     Equals,
     LessThan,
     GreaterThan,
-    Plus,
-    Minus,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Concatenate,
 }
 
 export interface BinaryOpAstNode {
@@ -563,10 +566,19 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
         if (!isNegated) {
             switch (token.kind) {
                 case TokenKind.Plus:
-                    op = BinaryOp.Plus;
+                    op = BinaryOp.Add;
                     break;
                 case TokenKind.Minus:
-                    op = BinaryOp.Minus;
+                    op = BinaryOp.Subtract;
+                    break;
+                case TokenKind.Asterisk:
+                    op = BinaryOp.Multiply;
+                    break;
+                case TokenKind.ForwardSlash:
+                    op = BinaryOp.Divide;
+                    break;
+                case TokenKind.Underscore:
+                    op = BinaryOp.Concatenate;
                     break;
             }
         }

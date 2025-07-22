@@ -17,6 +17,9 @@ export const enum TokenKind {
     Dot,
     Plus,
     Minus,
+    Asterisk,
+    ForwardSlash,
+    Underscore,
     ExclamationPoint,
     Equals,
     LessThan,
@@ -39,6 +42,9 @@ interface BasicToken {
         | TokenKind.Dot
         | TokenKind.Plus
         | TokenKind.Minus
+        | TokenKind.Asterisk
+        | TokenKind.ForwardSlash
+        | TokenKind.Underscore
         | TokenKind.ExclamationPoint
         | TokenKind.Equals
         | TokenKind.LessThan
@@ -234,6 +240,21 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "-":
                 tokens.push({
                     kind: TokenKind.Minus,
+                });
+                break;
+            case "*":
+                tokens.push({
+                    kind: TokenKind.Asterisk,
+                });
+                break;
+            case "/":
+                tokens.push({
+                    kind: TokenKind.ForwardSlash,
+                });
+                break;
+            case "_":
+                tokens.push({
+                    kind: TokenKind.Underscore,
                 });
                 break;
             case "!":

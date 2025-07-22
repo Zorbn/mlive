@@ -33,6 +33,13 @@ test("simple math with parenthesis", () => {
     expectScript(` w 3+-(4-3)`, `2`);
 });
 
+test("left to right precedence", () => {
+    expectScript(` w 3+4*3`, `21`);
+    expectScript(` w 3+(4*3)`, `15`);
+    expectScript(` w 4+10/2`, `7`);
+    expectScript(` w 4+(10/2)`, `9`);
+});
+
 test("math with spaces", () => {
     expectScript(` w 3 + 4 - 3`, ``, [
         {
@@ -96,13 +103,13 @@ test("nested arrays", () => {
     expectScript(` s arr(1,2)=99 w !,arr(1,2)`, `\n99`);
 });
 
-// test("string concatenation", () => {
-//     expectScript(
-//         ` s a="Hello" s b="World" w !,a_", "_b`,
-//         `
-// Hello, World`,
-//     );
-// });
+test("string concatenation", () => {
+    expectScript(
+        ` s a="Hello" s b="World" w !,a_", "_b`,
+        `
+Hello, World`,
+    );
+});
 
 // test("for loop", () => {
 //     expectScript(

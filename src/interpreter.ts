@@ -37,7 +37,6 @@ import {
 
 // TODO: Most important/unique things to interpret right now:
 // support version of the for command with arguments
-// more operators (concatenation, multiplication, division, etc.)
 
 type Environment = Map<string, MValue | MReference>;
 
@@ -257,11 +256,20 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
         case BinaryOp.GreaterThan:
             value = left > right ? 1 : 0;
             break;
-        case BinaryOp.Plus:
+        case BinaryOp.Add:
             value = mValueToNumber(left) + mValueToNumber(right);
             break;
-        case BinaryOp.Minus:
+        case BinaryOp.Subtract:
             value = mValueToNumber(left) - mValueToNumber(right);
+            break;
+        case BinaryOp.Multiply:
+            value = mValueToNumber(left) * mValueToNumber(right);
+            break;
+        case BinaryOp.Divide:
+            value = mValueToNumber(left) / mValueToNumber(right);
+            break;
+        case BinaryOp.Concatenate:
+            value = mValueToString(left) + mValueToString(right);
             break;
         default:
             reportError("Unimplemented binary op", state);
