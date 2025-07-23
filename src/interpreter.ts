@@ -98,6 +98,117 @@ const setSpecialVariable = (name: string, value: MValue, state: InterpreterState
     state.environmentStack[0].set(name, value);
 };
 
+const getVariable = (node: VariableAstNode, state: InterpreterState): boolean => {
+    const name = node.name.text;
+    const reference = getVariableReference(name, state);
+
+    let value = getReferenceValue(reference, state);
+
+    if (!value) {
+        state.valueStack.push("");
+        return true;
+    }
+
+    for (let i = 0; i < node.subscripts.length; i++) {
+        if (typeof value !== "object") {
+            state.valueStack.push("");
+            return true;
+        }
+
+        const subscript = interpretExpression(node.subscripts[i], state);
+
+        if (!subscript) {
+            return false;
+        }
+
+        const subscriptKey = mValueToString(state.valueStack.pop()!);
+        value = mArrayGet(value, subscriptKey);
+
+        if (!value) {
+            state.valueStack.push("");
+            return true;
+        }
+    }
+
+    state.valueStack.push(mValueToScalar(value));
+    return true;
+};
+
+const setVariable = (
+    variable: VariableAstNode,
+    value: MValue,
+    state: InterpreterState,
+): boolean => {
+    const name = variable.name.text;
+    const reference = getVariableReference(name, state);
+
+    if (variable.subscripts.length === 0) {
+        setReferenceValue(reference, value, state);
+        return true;
+    }
+
+    let array = getReferenceValue(reference, state);
+
+    if (!array) {
+        array = {
+            kind: MObjectKind.Array,
+            value: "",
+        };
+
+        setReferenceValue(reference, array, state);
+    } else if (typeof array !== "object") {
+        array = {
+            kind: MObjectKind.Array,
+            value: array,
+        };
+
+        setReferenceValue(reference, array, state);
+    }
+
+    for (let i = 0; i < variable.subscripts.length - 1; i++) {
+        const subscript = interpretExpression(variable.subscripts[i], state);
+
+        if (!subscript) {
+            return false;
+        }
+
+        const subscriptKey = mValueToString(state.valueStack.pop()!);
+        let innerArray = mArrayGet(array, subscriptKey);
+
+        if (!innerArray) {
+            innerArray = {
+                kind: MObjectKind.Array,
+                value: "",
+            };
+
+            mArraySet(array, subscriptKey, innerArray);
+        } else if (typeof array !== "object") {
+            innerArray = {
+                kind: MObjectKind.Array,
+                value: innerArray as MScalar,
+            };
+
+            mArraySet(array, subscriptKey, innerArray);
+        }
+
+        array = innerArray as MArray;
+    }
+
+    const finalSubscript = interpretExpression(
+        variable.subscripts[variable.subscripts.length - 1],
+        state,
+    );
+
+    if (!finalSubscript) {
+        return false;
+    }
+
+    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
+
+    mArraySet(array, finalSubscriptKey, value);
+    return true;
+};
+
 const reportError = (message: string, state: InterpreterState) => {
     state.errors.push({
         message,
@@ -164,42 +275,6 @@ const interpretCall = (
 
     state.environmentStack.length = callEnvironmentStackLength;
 
-    return true;
-};
-
-const interpretVariableLookup = (node: VariableAstNode, state: InterpreterState): boolean => {
-    const name = node.name.text;
-    const reference = getVariableReference(name, state);
-
-    let value = getReferenceValue(reference, state);
-
-    if (!value) {
-        state.valueStack.push("");
-        return true;
-    }
-
-    for (let i = 0; i < node.subscripts.length; i++) {
-        if (typeof value !== "object") {
-            state.valueStack.push("");
-            return true;
-        }
-
-        const subscript = interpretExpression(node.subscripts[i], state);
-
-        if (!subscript) {
-            return false;
-        }
-
-        const subscriptKey = mValueToString(state.valueStack.pop()!);
-        value = mArrayGet(value, subscriptKey);
-
-        if (!value) {
-            state.valueStack.push("");
-            return true;
-        }
-    }
-
-    state.valueStack.push(mValueToScalar(value));
     return true;
 };
 
@@ -342,7 +417,7 @@ const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean =>
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
-            if (!interpretVariableLookup(node, state)) {
+            if (!getVariable(node, state)) {
                 return false;
             }
 
@@ -437,15 +512,7 @@ const interpretIf = (node: IfAstNode, state: InterpreterState): CommandResult =>
 
     setSpecialVariable("$TEST", 1, state);
 
-    for (const command of node.children) {
-        const result = interpretCommand(command, state);
-
-        if (result !== CommandResult.Continue) {
-            return result;
-        }
-    }
-
-    return CommandResult.Continue;
+    return interpretChildCommands(node.children, state);
 };
 
 const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResult => {
@@ -455,7 +522,14 @@ const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResul
         return CommandResult.Continue;
     }
 
-    for (const command of node.children) {
+    return interpretChildCommands(node.children, state);
+};
+
+const interpretChildCommands = (
+    children: CommandAstNode[],
+    state: InterpreterState,
+): CommandResult => {
+    for (const command of children) {
         const result = interpretCommand(command, state);
 
         if (result !== CommandResult.Continue) {
@@ -467,17 +541,65 @@ const interpretElse = (node: ElseAstNode, state: InterpreterState): CommandResul
 };
 
 const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult => {
+    if (!node.arg) {
+        while (true) {
+            const result = interpretChildCommands(node.children, state);
+
+            switch (result) {
+                case CommandResult.Halt:
+                    return result;
+                case CommandResult.Quit:
+                    return CommandResult.Continue;
+            }
+        }
+    }
+
+    if (
+        !interpretExpression(node.arg.start, state) ||
+        !interpretExpression(node.arg.increment, state) ||
+        !interpretExpression(node.arg.end, state)
+    ) {
+        return CommandResult.Halt;
+    }
+
+    const end = mValueToNumber(state.valueStack.pop()!);
+    const increment = mValueToNumber(state.valueStack.pop()!);
+    const start = mValueToNumber(state.valueStack.pop()!);
+
+    if (!setVariable(node.arg.variable, start, state)) {
+        return CommandResult.Halt;
+    }
+
     while (true) {
-        for (const command of node.children) {
-            const result = interpretCommand(command, state);
+        if (!getVariable(node.arg.variable, state)) {
+            return CommandResult.Halt;
+        }
 
-            if (result === CommandResult.Halt) {
+        const variableValue = mValueToNumber(state.valueStack.pop()!);
+
+        if ((increment < 0 && variableValue < start) || (increment > 0 && variableValue > end)) {
+            return CommandResult.Continue;
+        }
+
+        let result = interpretChildCommands(node.children, state);
+
+        switch (result) {
+            case CommandResult.Halt:
                 return result;
-            }
-
-            if (result === CommandResult.Quit) {
+            case CommandResult.Quit:
                 return CommandResult.Continue;
-            }
+        }
+
+        if (!getVariable(node.arg.variable, state)) {
+            return CommandResult.Halt;
+        }
+
+        const nextVariableValue = mValueToNumber(state.valueStack.pop()!) + increment;
+
+        setVariable(node.arg.variable, nextVariableValue, state);
+
+        if (result !== CommandResult.Continue) {
+            return result;
         }
     }
 };
@@ -490,74 +612,9 @@ const interpretVariableSetArgument = (
         return CommandResult.Halt;
     }
 
-    const name = node.variable.name.text;
-    const reference = getVariableReference(name, state);
+    const value = state.valueStack.pop()!;
 
-    if (node.variable.subscripts.length === 0) {
-        setReferenceValue(reference, state.valueStack.pop()!, state);
-        return CommandResult.Continue;
-    }
-
-    let array = getReferenceValue(reference, state);
-
-    if (!array) {
-        array = {
-            kind: MObjectKind.Array,
-            value: "",
-        };
-
-        setReferenceValue(reference, array, state);
-    } else if (typeof array !== "object") {
-        array = {
-            kind: MObjectKind.Array,
-            value: array,
-        };
-
-        setReferenceValue(reference, array, state);
-    }
-
-    for (let i = 0; i < node.variable.subscripts.length - 1; i++) {
-        const subscript = interpretExpression(node.variable.subscripts[i], state);
-
-        if (!subscript) {
-            return CommandResult.Halt;
-        }
-
-        const subscriptKey = mValueToString(state.valueStack.pop()!);
-        let innerArray = mArrayGet(array, subscriptKey);
-
-        if (!innerArray) {
-            innerArray = {
-                kind: MObjectKind.Array,
-                value: "",
-            };
-
-            mArraySet(array, subscriptKey, innerArray);
-        } else if (typeof array !== "object") {
-            innerArray = {
-                kind: MObjectKind.Array,
-                value: innerArray as MScalar,
-            };
-
-            mArraySet(array, subscriptKey, innerArray);
-        }
-
-        array = innerArray as MArray;
-    }
-
-    const finalSubscript = interpretExpression(
-        node.variable.subscripts[node.variable.subscripts.length - 1],
-        state,
-    );
-
-    if (!finalSubscript) {
-        return CommandResult.Halt;
-    }
-
-    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
-
-    mArraySet(array, finalSubscriptKey, state.valueStack.pop()!);
-    return CommandResult.Continue;
+    return setVariable(node.variable, value, state) ? CommandResult.Continue : CommandResult.Halt;
 };
 
 const interpretSet = (node: SetAstNode, state: InterpreterState): CommandResult => {

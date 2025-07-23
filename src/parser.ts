@@ -9,6 +9,7 @@ export const enum AstNodeKind {
     DoBlock,
     If,
     For,
+    ForArgument,
     Else,
     SetArgument,
     Set,
@@ -61,8 +62,17 @@ export interface IfAstNode {
     children: CommandAstNode[];
 }
 
+export interface ForArgumentAstNode {
+    kind: AstNodeKind.ForArgument;
+    variable: VariableAstNode;
+    start: ExpressionAstNode;
+    increment: ExpressionAstNode;
+    end: ExpressionAstNode;
+}
+
 export interface ForAstNode {
     kind: AstNodeKind.For;
+    arg?: ForArgumentAstNode;
     children: CommandAstNode[];
 }
 
@@ -810,11 +820,58 @@ const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefine
     };
 };
 
-const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined => {
-    if (!matchWhitespace(input, state)) {
-        // TODO:
-        reportError("For commands with arguments are not supported yet", state);
+// TODO: There may be only a start with no increment or end in which case the commands in the loop are only executed once.
+// TODO: The end part of the range may be missing.
+const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstNode | undefined => {
+    const variable = parseVariable(input, state);
+
+    if (!variable) {
         return;
+    }
+
+    if (!matchToken(input, state, TokenKind.Equals)) {
+        reportError("Expected equals after for loop variable", state);
+        return;
+    }
+
+    const loopRange = [];
+
+    for (let i = 0; i < 3; i++) {
+        if (i > 0) {
+            if (!matchToken(input, state, TokenKind.Colon)) {
+                reportError("Expected colon between parts of the for loop range", state);
+                return;
+            }
+        }
+
+        const part = parseExpression(input, state);
+
+        if (!part) {
+            return;
+        }
+
+        loopRange[i] = part;
+    }
+
+    return {
+        kind: AstNodeKind.ForArgument,
+        variable,
+        start: loopRange[0],
+        increment: loopRange[1],
+        end: loopRange[2],
+    };
+};
+
+const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined => {
+    let arg: ForArgumentAstNode | undefined;
+
+    if (!matchWhitespace(input, state)) {
+        arg = parseForArgument(input, state);
+
+        if (!matchWhitespace(input, state)) {
+            reportError("Expected space after for loop argument", state);
+            return;
+        }
     }
 
     const children: CommandAstNode[] = [];
@@ -831,6 +888,7 @@ const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined 
 
     return {
         kind: AstNodeKind.For,
+        arg,
         children,
     };
 };

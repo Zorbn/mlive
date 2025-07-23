@@ -111,15 +111,15 @@ Hello, World`,
     );
 });
 
-// test("for loop", () => {
-//     expectScript(
-//         ` f i=1:1:3 w !,"i=",i`,
-//         `
-// i=1
-// i=2
-// i=3`,
-//     );
-// });
+test("for loop", () => {
+    expectScript(
+        ` f i=1:1:3 w !,"i=",i`,
+        `
+i=1
+i=2
+i=3`,
+    );
+});
 
 test("undefined variable", () => {
     expectScript(` w !,y`, `\n`);
