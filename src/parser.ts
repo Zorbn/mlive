@@ -65,9 +65,8 @@ export interface IfAstNode {
 export interface ForArgumentAstNode {
     kind: AstNodeKind.ForArgument;
     variable: VariableAstNode;
-    start: ExpressionAstNode;
-    increment: ExpressionAstNode;
-    end: ExpressionAstNode;
+    // Either start, start:increment, or start:increment:end.
+    expressions: ExpressionAstNode[];
 }
 
 export interface ForAstNode {
@@ -170,6 +169,8 @@ export interface UnaryOpAstNode {
 }
 
 export const enum BinaryOp {
+    Or,
+    And,
     Equals,
     LessThan,
     GreaterThan,
@@ -562,6 +563,12 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
         let op: BinaryOp | undefined;
 
         switch (token.kind) {
+            case TokenKind.ExclamationPoint:
+                op = BinaryOp.Or;
+                break;
+            case TokenKind.Ampersand:
+                op = BinaryOp.And;
+                break;
             case TokenKind.Equals:
                 op = BinaryOp.Equals;
                 break;
@@ -820,8 +827,6 @@ const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefine
     };
 };
 
-// TODO: There may be only a start with no increment or end in which case the commands in the loop are only executed once.
-// TODO: The end part of the range may be missing.
 const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstNode | undefined => {
     const variable = parseVariable(input, state);
 
@@ -834,31 +839,26 @@ const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstN
         return;
     }
 
-    const loopRange = [];
+    const expressions = [];
 
     for (let i = 0; i < 3; i++) {
-        if (i > 0) {
-            if (!matchToken(input, state, TokenKind.Colon)) {
-                reportError("Expected colon between parts of the for loop range", state);
-                return;
-            }
-        }
-
         const part = parseExpression(input, state);
 
         if (!part) {
             return;
         }
 
-        loopRange[i] = part;
+        expressions[i] = part;
+
+        if (i < 2 && !matchToken(input, state, TokenKind.Colon)) {
+            break;
+        }
     }
 
     return {
         kind: AstNodeKind.ForArgument,
         variable,
-        start: loopRange[0],
-        increment: loopRange[1],
-        end: loopRange[2],
+        expressions,
     };
 };
 

@@ -21,6 +21,7 @@ export const enum TokenKind {
     ForwardSlash,
     Underscore,
     ExclamationPoint,
+    Ampersand,
     Equals,
     LessThan,
     GreaterThan,
@@ -46,6 +47,7 @@ interface BasicToken {
         | TokenKind.ForwardSlash
         | TokenKind.Underscore
         | TokenKind.ExclamationPoint
+        | TokenKind.Ampersand
         | TokenKind.Equals
         | TokenKind.LessThan
         | TokenKind.GreaterThan
@@ -260,6 +262,11 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             case "!":
                 tokens.push({
                     kind: TokenKind.ExclamationPoint,
+                });
+                break;
+            case "&":
+                tokens.push({
+                    kind: TokenKind.Ampersand,
                 });
                 break;
             case "=":

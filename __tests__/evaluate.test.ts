@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { evaluate } from "../src/evaluate.js";
 import { MError } from "../src/mError.js";
 
-const expectScript = (script: string, output: string, errors?: MError[]) => {
+const assertScript = (script: string, output: string, errors?: MError[]) => {
     assert.deepStrictEqual(evaluate(script), {
         output,
         errors: errors ?? [],
@@ -11,7 +11,7 @@ const expectScript = (script: string, output: string, errors?: MError[]) => {
 };
 
 test("no indent", () => {
-    expectScript(`w 1`, ``, [
+    assertScript(`w 1`, ``, [
         {
             line: 0,
             column: 2,
@@ -21,27 +21,27 @@ test("no indent", () => {
 });
 
 test("print values", () => {
-    expectScript(` w 1`, `1`);
-    expectScript(` w "one"`, `one`);
+    assertScript(` w 1`, `1`);
+    assertScript(` w "one"`, `one`);
 });
 
 test("simple math", () => {
-    expectScript(` w 3+4-3`, `4`);
+    assertScript(` w 3+4-3`, `4`);
 });
 
 test("simple math with parenthesis", () => {
-    expectScript(` w 3+-(4-3)`, `2`);
+    assertScript(` w 3+-(4-3)`, `2`);
 });
 
 test("left to right precedence", () => {
-    expectScript(` w 3+4*3`, `21`);
-    expectScript(` w 3+(4*3)`, `15`);
-    expectScript(` w 4+10/2`, `7`);
-    expectScript(` w 4+(10/2)`, `9`);
+    assertScript(` w 3+4*3`, `21`);
+    assertScript(` w 3+(4*3)`, `15`);
+    assertScript(` w 4+10/2`, `7`);
+    assertScript(` w 4+(10/2)`, `9`);
 });
 
 test("math with spaces", () => {
-    expectScript(` w 3 + 4 - 3`, ``, [
+    assertScript(` w 3 + 4 - 3`, ``, [
         {
             line: 0,
             column: 5,
@@ -51,7 +51,7 @@ test("math with spaces", () => {
 });
 
 test("print array keys", () => {
-    expectScript(
+    assertScript(
         `
 main n varArr
     s varArr(1)="a",varArr(2)="b",varArr(3,"hello")="hello there",varArr(3,"hi")="hi there"
@@ -72,7 +72,7 @@ Key: 3`,
 });
 
 test("hello world", () => {
-    expectScript(
+    assertScript(
         ` wRIte !,"Hello, world"`,
         `
 Hello, world`,
@@ -80,7 +80,7 @@ Hello, world`,
 });
 
 test("if statements", () => {
-    expectScript(
+    assertScript(
         `
     i 100=100,1,3'>-2 d  w !,"The first condition is true"
     . w !,"Hi from within condition 1"
@@ -96,37 +96,69 @@ The second condition is true`,
 });
 
 test("variable assignment and retrieval", () => {
-    expectScript(` s x=42 w !,x`, `\n42`);
+    assertScript(` s x=42 w !,x`, `\n42`);
 });
 
 test("nested arrays", () => {
-    expectScript(` s arr(1,2)=99 w !,arr(1,2)`, `\n99`);
+    assertScript(` s arr(1,2)=99 w !,arr(1,2)`, `\n99`);
 });
 
 test("string concatenation", () => {
-    expectScript(
+    assertScript(
         ` s a="Hello" s b="World" w !,a_", "_b`,
         `
 Hello, World`,
     );
 });
 
-test("for loop", () => {
-    expectScript(
-        ` f i=1:1:3 w !,"i=",i`,
+test("for loops", () => {
+    assertScript(
+        ` f i=1:1:5 w !,"i: ",i`,
         `
-i=1
-i=2
-i=3`,
+i: 1
+i: 2
+i: 3
+i: 4
+i: 5`,
+    );
+    assertScript(
+        ` f i=1:1 q:i>3  w !,"i: ",i`,
+        `
+i: 1
+i: 2
+i: 3`,
+    );
+    assertScript(
+        ` f i=1 w !,"i: ",i`,
+        `
+i: 1`,
     );
 });
 
+test("logical and/or", () => {
+    assertScript(` w '""&1`, `1`);
+    assertScript(` w '""&""`, `0`);
+    assertScript(` w ""&1`, `0`);
+    assertScript(` w ""&""`, `0`);
+});
+
+test("logical or", () => {
+    assertScript(` w '""!1`, `1`);
+    assertScript(` w '""!""`, `1`);
+    assertScript(` w ""!1`, `1`);
+    assertScript(` w ""!""`, `0`);
+});
+
 test("undefined variable", () => {
-    expectScript(` w !,y`, `\n`);
+    assertScript(
+        ` w !,y`,
+        `
+`,
+    );
 });
 
 test("function call with argument", () => {
-    expectScript(
+    assertScript(
         `
     d greet("Test") q
 
@@ -139,7 +171,7 @@ Hello, Test`,
 });
 
 test("comments", () => {
-    expectScript(
+    assertScript(
         `
     ; this is a comment
     s x=5 w !,x`,

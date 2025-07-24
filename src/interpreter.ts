@@ -322,6 +322,12 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     let value: MValue;
 
     switch (node.op) {
+        case BinaryOp.Or:
+            value = mValueToNumber(left) !== 0 || mValueToNumber(right) !== 0 ? 1 : 0;
+            break;
+        case BinaryOp.And:
+            value = mValueToNumber(left) !== 0 && mValueToNumber(right) !== 0 ? 1 : 0;
+            break;
         case BinaryOp.Equals:
             value = left === right ? 1 : 0;
             break;
@@ -352,7 +358,7 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     }
 
     if (node.isNegated) {
-        value = value === 0 ? 1 : 0;
+        value = mValueToNumber(value) === 0 ? 1 : 0;
     }
 
     state.valueStack.push(value);
@@ -540,67 +546,171 @@ const interpretChildCommands = (
     return CommandResult.Continue;
 };
 
-const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult => {
-    if (!node.arg) {
-        while (true) {
-            const result = interpretChildCommands(node.children, state);
-
-            switch (result) {
-                case CommandResult.Halt:
-                    return result;
-                case CommandResult.Quit:
-                    return CommandResult.Continue;
-            }
+const interpretForWithNoArg = (
+    children: CommandAstNode[],
+    state: InterpreterState,
+): CommandResult => {
+    while (true) {
+        switch (interpretChildCommands(children, state)) {
+            case CommandResult.Halt:
+                return CommandResult.Halt;
+            case CommandResult.Quit:
+                return CommandResult.Continue;
         }
     }
+};
 
-    if (
-        !interpretExpression(node.arg.start, state) ||
-        !interpretExpression(node.arg.increment, state) ||
-        !interpretExpression(node.arg.end, state)
-    ) {
+const interpretForWithStart = (
+    variable: VariableAstNode,
+    start: ExpressionAstNode,
+    children: CommandAstNode[],
+    state: InterpreterState,
+): CommandResult => {
+    if (!interpretExpression(start, state)) {
         return CommandResult.Halt;
     }
 
-    const end = mValueToNumber(state.valueStack.pop()!);
-    const increment = mValueToNumber(state.valueStack.pop()!);
-    const start = mValueToNumber(state.valueStack.pop()!);
+    const startValue = mValueToNumber(state.valueStack.pop()!);
 
-    if (!setVariable(node.arg.variable, start, state)) {
+    if (!setVariable(variable, startValue, state)) {
+        return CommandResult.Halt;
+    }
+
+    if (interpretChildCommands(children, state) === CommandResult.Halt) {
+        return CommandResult.Halt;
+    }
+
+    return CommandResult.Continue;
+};
+
+const interpretForWithStartIncrement = (
+    variable: VariableAstNode,
+    start: ExpressionAstNode,
+    increment: ExpressionAstNode,
+    children: CommandAstNode[],
+    state: InterpreterState,
+): CommandResult => {
+    if (!interpretExpression(start, state) || !interpretExpression(increment, state)) {
+        return CommandResult.Halt;
+    }
+
+    const incrementValue = mValueToNumber(state.valueStack.pop()!);
+    const startValue = mValueToNumber(state.valueStack.pop()!);
+
+    if (!setVariable(variable, startValue, state)) {
         return CommandResult.Halt;
     }
 
     while (true) {
-        if (!getVariable(node.arg.variable, state)) {
+        switch (interpretChildCommands(children, state)) {
+            case CommandResult.Halt:
+                return CommandResult.Halt;
+            case CommandResult.Quit:
+                return CommandResult.Continue;
+        }
+
+        if (!getVariable(variable, state)) {
+            return CommandResult.Halt;
+        }
+
+        const nextVariableValue = mValueToNumber(state.valueStack.pop()!) + incrementValue;
+
+        if (!setVariable(variable, nextVariableValue, state)) {
+            return CommandResult.Halt;
+        }
+    }
+};
+
+const interpretForWithStartIncrementEnd = (
+    variable: VariableAstNode,
+    start: ExpressionAstNode,
+    increment: ExpressionAstNode,
+    end: ExpressionAstNode,
+    children: CommandAstNode[],
+    state: InterpreterState,
+): CommandResult => {
+    if (
+        !interpretExpression(start, state) ||
+        !interpretExpression(increment, state) ||
+        !interpretExpression(end, state)
+    ) {
+        return CommandResult.Halt;
+    }
+
+    const endValue = mValueToNumber(state.valueStack.pop()!);
+    const incrementValue = mValueToNumber(state.valueStack.pop()!);
+    const startValue = mValueToNumber(state.valueStack.pop()!);
+
+    if (!setVariable(variable, startValue, state)) {
+        return CommandResult.Halt;
+    }
+
+    while (true) {
+        if (!getVariable(variable, state)) {
             return CommandResult.Halt;
         }
 
         const variableValue = mValueToNumber(state.valueStack.pop()!);
 
-        if ((increment < 0 && variableValue < start) || (increment > 0 && variableValue > end)) {
+        if (
+            (incrementValue < 0 && variableValue < startValue) ||
+            (incrementValue > 0 && variableValue > endValue)
+        ) {
             return CommandResult.Continue;
         }
 
-        let result = interpretChildCommands(node.children, state);
-
-        switch (result) {
+        switch (interpretChildCommands(children, state)) {
             case CommandResult.Halt:
-                return result;
+                return CommandResult.Halt;
             case CommandResult.Quit:
                 return CommandResult.Continue;
         }
 
-        if (!getVariable(node.arg.variable, state)) {
+        if (!getVariable(variable, state)) {
             return CommandResult.Halt;
         }
 
-        const nextVariableValue = mValueToNumber(state.valueStack.pop()!) + increment;
+        const nextVariableValue = mValueToNumber(state.valueStack.pop()!) + incrementValue;
 
-        setVariable(node.arg.variable, nextVariableValue, state);
-
-        if (result !== CommandResult.Continue) {
-            return result;
+        if (!setVariable(variable, nextVariableValue, state)) {
+            return CommandResult.Halt;
         }
+    }
+};
+
+const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult => {
+    if (!node.arg) {
+        return interpretForWithNoArg(node.children, state);
+    }
+
+    switch (node.arg.expressions.length) {
+        case 1:
+            return interpretForWithStart(
+                node.arg.variable,
+                node.arg.expressions[0],
+                node.children,
+                state,
+            );
+        case 2:
+            return interpretForWithStartIncrement(
+                node.arg.variable,
+                node.arg.expressions[0],
+                node.arg.expressions[1],
+                node.children,
+                state,
+            );
+        case 3:
+            return interpretForWithStartIncrementEnd(
+                node.arg.variable,
+                node.arg.expressions[0],
+                node.arg.expressions[1],
+                node.arg.expressions[2],
+                node.children,
+                state,
+            );
+        default:
+            reportError("Invalid number of expressions in for argument", state);
+            return CommandResult.Halt;
     }
 };
 
@@ -687,7 +797,7 @@ const interpretTopLevel = (state: InterpreterState, start: number) => {
     for (let i = start; i < state.ast.children.length; i++) {
         const result = interpretCommand(state.ast.children[i], state);
 
-        if (result == CommandResult.Quit || result == CommandResult.Halt) {
+        if (result !== CommandResult.Continue) {
             break;
         }
     }
