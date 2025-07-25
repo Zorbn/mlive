@@ -179,3 +179,36 @@ test("comments", () => {
 5`,
     );
 });
+
+test("kill one identifier", () => {
+    assertScript(
+        `
+    n a
+    s a="hi"
+    n a
+    s a="hello"
+    w !,a
+    k a
+    w !,a
+    k a
+    w !,a`,
+        `
+hello
+hi
+`,
+    );
+});
+
+test("kill all variables", () => {
+    assertScript(
+        `
+    n a
+    s a="hi"
+    n a,b
+    s a="hello"
+    s b="there"
+    k
+    w a,b`,
+        ``,
+    );
+});
