@@ -15,6 +15,7 @@ export const enum AstNodeKind {
     SetArgument,
     Set,
     New,
+    Kill,
     Identifier,
     Variable,
     NumberLiteral,
@@ -97,6 +98,11 @@ export interface NewAstNode extends TextRange {
     args: IdentifierAstNode[];
 }
 
+export interface KillAstNode extends TextRange {
+    kind: AstNodeKind.Kill;
+    args: IdentifierAstNode[];
+}
+
 export type CommandBodyAstNode =
     | WriteAstNode
     | QuitAstNode
@@ -107,7 +113,8 @@ export type CommandBodyAstNode =
     | ElseAstNode
     | ForAstNode
     | SetAstNode
-    | NewAstNode;
+    | NewAstNode
+    | KillAstNode;
 
 export interface CommandAstNode extends TextRange {
     kind: AstNodeKind.Command;
@@ -1010,10 +1017,11 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
     };
 };
 
-const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {
-    const firstToken = getToken(input, state);
-
-    const args: IdentifierAstNode[] = [];
+const parseIdentifierList = (
+    input: Token[][],
+    state: ParserState,
+): IdentifierAstNode[] | undefined => {
+    const identifiers: IdentifierAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
         const token = matchToken(input, state, TokenKind.Identifier);
@@ -1022,17 +1030,48 @@ const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined 
             return;
         }
 
-        args.push(makeIdentifierAstNode(token));
+        identifiers.push(makeIdentifierAstNode(token));
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
     }
 
+    return identifiers;
+};
+
+const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
+    const args = parseIdentifierList(input, state);
+
+    if (!args) {
+        return;
+    }
+
     const lastToken = getToken(input, state);
 
     return {
         kind: AstNodeKind.New,
+        args,
+        start: firstToken.start,
+        end: lastToken.end,
+    };
+};
+
+const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
+    const args = parseIdentifierList(input, state);
+
+    if (!args) {
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.Kill,
         args,
         start: firstToken.start,
         end: lastToken.end,
@@ -1083,6 +1122,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         body = parseSet(input, state);
     } else if ("new".startsWith(lowerCaseName)) {
         body = parseNew(input, state);
+    } else if ("kill".startsWith(lowerCaseName)) {
+        body = parseKill(input, state);
     } else {
         reportErrorAt("Unrecognized command name", nameToken, state);
     }

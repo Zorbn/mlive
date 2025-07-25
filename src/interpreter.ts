@@ -24,6 +24,7 @@ import {
     ExpressionAstNode,
     ForAstNode,
     IfAstNode,
+    KillAstNode,
     NewAstNode,
     OrderAstNode,
     QuitAstNode,
@@ -56,7 +57,7 @@ const getVariableReference = (name: string, state: InterpreterState): MReference
     for (let i = state.environmentStack.length - 1; i >= 0; i--) {
         const variable = state.environmentStack[i].get(name);
 
-        if (!variable) {
+        if (variable === undefined) {
             continue;
         }
 
@@ -227,6 +228,8 @@ const interpretCall = (
         return false;
     }
 
+    const callEnvironmentStackLength = state.environmentStack.length;
+
     let didPushEnvironment = false;
 
     if (tag.params) {
@@ -257,7 +260,6 @@ const interpretCall = (
         }
     }
 
-    const callEnvironmentStackLength = state.environmentStack.length;
     const callValueStackLength = state.valueStack.length;
 
     interpretTopLevel(state, tag.index);
@@ -752,6 +754,23 @@ const interpretNew = (node: NewAstNode, state: InterpreterState): CommandResult 
     return CommandResult.Continue;
 };
 
+const interpretKill = (node: KillAstNode, state: InterpreterState): CommandResult => {
+    if (node.args.length === 0) {
+        state.environmentStack = [new Map()];
+        return CommandResult.Continue;
+    }
+
+    for (const arg of node.args) {
+        for (let i = state.environmentStack.length - 1; i >= 0; i--) {
+            if (state.environmentStack[i].delete(arg.text)) {
+                break;
+            }
+        }
+    }
+
+    return CommandResult.Continue;
+};
+
 const interpretCommand = (node: CommandAstNode, state: InterpreterState): CommandResult => {
     if (node.condition) {
         if (!interpretExpression(node.condition, state)) {
@@ -780,6 +799,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretSet(node.body, state);
         case AstNodeKind.New:
             return interpretNew(node.body, state);
+        case AstNodeKind.Kill:
+            return interpretKill(node.body, state);
         case AstNodeKind.Call:
             return interpretCall(node.body, state, false)
                 ? CommandResult.Continue
@@ -808,8 +829,6 @@ export const interpret = (ast: TopLevelAstNode) => {
         output: [],
         errors: [],
     };
-
-    setSpecialVariable("$TEST", 0, state);
 
     interpretTopLevel(state, ast.tags.get("main")?.index ?? 0);
 
