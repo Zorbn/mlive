@@ -370,7 +370,7 @@ const parseSubscripts = (input: Token[][], state: ParserState): ExpressionAstNod
 const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefined => {
     const nameToken = getToken(input, state);
 
-    if (nameToken.kind != TokenKind.Identifier) {
+    if (nameToken.kind !== TokenKind.Identifier) {
         reportError("Expected an identifier", state);
         return;
     }
@@ -693,7 +693,7 @@ const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefi
                 nextToken(input, state);
                 args.push({ kind: AstNodeKind.ExclamationPointFormatter });
                 break;
-            default:
+            default: {
                 const expression = parseExpression(input, state);
 
                 if (!expression) {
@@ -702,6 +702,7 @@ const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefi
 
                 args.push(expression);
                 break;
+            }
         }
 
         if (!matchToken(input, state, TokenKind.Comma)) {
@@ -958,7 +959,7 @@ const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined 
 };
 
 const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
-    let nameToken = matchToken(input, state, TokenKind.Identifier);
+    const nameToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!nameToken) {
         reportError("Expected command name", state);
@@ -1030,7 +1031,7 @@ const parseTag = (input: Token[][], state: ParserState): string[] | null | undef
         params = [];
 
         for (let i = 0; ; i++) {
-            let paramToken = matchToken(input, state, TokenKind.Identifier);
+            const paramToken = matchToken(input, state, TokenKind.Identifier);
 
             if (!paramToken) {
                 if (i > 0) {

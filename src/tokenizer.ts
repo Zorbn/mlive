@@ -156,7 +156,7 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
 
         switch (firstChar) {
             case '"': {
-                let chars = [];
+                const chars = [];
 
                 x++;
 

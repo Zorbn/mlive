@@ -35,9 +35,6 @@ import {
     WriteAstNode,
 } from "./parser.js";
 
-// TODO: Most important/unique things to interpret right now:
-// support version of the for command with arguments
-
 type Environment = Map<string, MValue | MReference>;
 
 interface InterpreterState {
@@ -226,7 +223,7 @@ const interpretCall = (
     const tag = state.ast.tags.get(node.name.text);
 
     if (tag === undefined) {
-        reportError(`Tag \"${node.name.text}\" not found`, state);
+        reportError(`Tag "${node.name.text}" not found`, state);
         return false;
     }
 
