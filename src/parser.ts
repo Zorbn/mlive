@@ -1,5 +1,6 @@
 import { MError } from "./mError.js";
-import { Token, TokenKind } from "./tokenizer.js";
+import { TextRange } from "./textRange.js";
+import { IdentifierToken, Token, TokenKind } from "./tokenizer.js";
 
 export const enum AstNodeKind {
     TopLevel,
@@ -33,65 +34,65 @@ interface Tag {
     params: string[] | null;
 }
 
-export interface TopLevelAstNode {
+export interface TopLevelAstNode extends TextRange {
     kind: AstNodeKind.TopLevel;
     tags: Map<string, Tag>;
     children: CommandAstNode[];
 }
 
-export interface WriteAstNode {
+export interface WriteAstNode extends TextRange {
     kind: AstNodeKind.Write;
     args: WriteArgumentAstNode[];
 }
 
 export type WriteArgumentAstNode = ExpressionAstNode | ExclamationFormatter | HashFormatter;
 
-export interface QuitAstNode {
+export interface QuitAstNode extends TextRange {
     kind: AstNodeKind.Quit;
     returnValue?: ExpressionAstNode;
 }
 
-export interface DoBlockAstNode {
+export interface DoBlockAstNode extends TextRange {
     kind: AstNodeKind.DoBlock;
     children: CommandAstNode[];
 }
 
-export interface IfAstNode {
+export interface IfAstNode extends TextRange {
     kind: AstNodeKind.If;
     conditions: ExpressionAstNode[];
     children: CommandAstNode[];
 }
 
-export interface ForArgumentAstNode {
+export interface ForArgumentAstNode extends TextRange {
     kind: AstNodeKind.ForArgument;
     variable: VariableAstNode;
     // Either start, start:increment, or start:increment:end.
     expressions: ExpressionAstNode[];
 }
 
-export interface ForAstNode {
+export interface ForAstNode extends TextRange {
     kind: AstNodeKind.For;
     arg?: ForArgumentAstNode;
     children: CommandAstNode[];
 }
 
-export interface ElseAstNode {
+export interface ElseAstNode extends TextRange {
     kind: AstNodeKind.Else;
     children: CommandAstNode[];
 }
 
-export interface SetArgumentAstNode {
+export interface SetArgumentAstNode extends TextRange {
     kind: AstNodeKind.SetArgument;
     variable: VariableAstNode;
     value: ExpressionAstNode;
 }
 
-export interface SetAstNode {
+export interface SetAstNode extends TextRange {
     kind: AstNodeKind.Set;
     args: SetArgumentAstNode[];
 }
 
-export interface NewAstNode {
+export interface NewAstNode extends TextRange {
     kind: AstNodeKind.New;
     args: IdentifierAstNode[];
 }
@@ -101,19 +102,20 @@ export type CommandBodyAstNode =
     | QuitAstNode
     | CallAstNode
     | DoBlockAstNode
+    | ForAstNode
     | IfAstNode
     | ElseAstNode
     | ForAstNode
     | SetAstNode
     | NewAstNode;
 
-export interface CommandAstNode {
+export interface CommandAstNode extends TextRange {
     kind: AstNodeKind.Command;
     condition?: ExpressionAstNode;
     body: CommandBodyAstNode;
 }
 
-export interface ReferenceAstNode {
+export interface ReferenceAstNode extends TextRange {
     kind: AstNodeKind.Reference;
     name: IdentifierAstNode;
 }
@@ -129,28 +131,28 @@ export type ExpressionAstNode =
     | BinaryOpAstNode
     | OrderAstNode;
 
-export interface IdentifierAstNode {
+export interface IdentifierAstNode extends TextRange {
     kind: AstNodeKind.Identifier;
     text: string;
 }
 
-export interface VariableAstNode {
+export interface VariableAstNode extends TextRange {
     kind: AstNodeKind.Variable;
     name: IdentifierAstNode;
     subscripts: ExpressionAstNode[];
 }
 
-export interface NumberLiteralAstNode {
+export interface NumberLiteralAstNode extends TextRange {
     kind: AstNodeKind.NumberLiteral;
     value: number;
 }
 
-export interface StringLiteralAstNode {
+export interface StringLiteralAstNode extends TextRange {
     kind: AstNodeKind.StringLiteral;
     value: string;
 }
 
-export interface CallAstNode {
+export interface CallAstNode extends TextRange {
     kind: AstNodeKind.Call;
     name: IdentifierAstNode;
     args: CallArgumentAstNode[];
@@ -162,7 +164,7 @@ export const enum UnaryOp {
     Minus,
 }
 
-export interface UnaryOpAstNode {
+export interface UnaryOpAstNode extends TextRange {
     kind: AstNodeKind.UnaryOp;
     right: ExpressionAstNode;
     op: UnaryOp;
@@ -181,7 +183,7 @@ export const enum BinaryOp {
     Concatenate,
 }
 
-export interface BinaryOpAstNode {
+export interface BinaryOpAstNode extends TextRange {
     kind: AstNodeKind.BinaryOp;
     left: ExpressionAstNode;
     right: ExpressionAstNode;
@@ -189,7 +191,7 @@ export interface BinaryOpAstNode {
     isNegated: boolean;
 }
 
-export interface OrderAstNode {
+export interface OrderAstNode extends TextRange {
     kind: AstNodeKind.Order;
     variable: VariableAstNode;
 }
@@ -204,8 +206,8 @@ export interface HashFormatter {
 
 export type AstNode =
     | TopLevelAstNode
+    | CommandBodyAstNode
     | CommandAstNode
-    | DoBlockAstNode
     | ExpressionAstNode
     | IdentifierAstNode
     | NumberLiteralAstNode
@@ -223,6 +225,15 @@ interface ParserState {
     indentationLevel: number;
     errors: MError[];
 }
+
+const makeIdentifierAstNode = (token: IdentifierToken): IdentifierAstNode => {
+    return {
+        kind: AstNodeKind.Identifier,
+        text: token.text,
+        start: token.start,
+        end: token.end,
+    };
+};
 
 const makeParserPosition = (): ParserPosition => ({
     line: 0,
@@ -287,12 +298,17 @@ const getWhitespace = (input: Token[][], state: ParserState): boolean => {
     );
 };
 
-const reportError = (message: string, state: ParserState) => {
+const reportError = (message: string, input: Token[][], state: ParserState) => {
+    const token = getToken(input, state);
+
+    reportErrorAt(message, token, state);
+};
+
+const reportErrorAt = (message: string, token: Token, state: ParserState) => {
     state.errors.push({
         message,
-        line: state.position.line,
-        // TODO: The column here is actually the index of the token. We should store the real column of each token so it can be reported here.
-        column: state.position.column,
+        line: token.start.line,
+        column: token.start.column,
     });
 };
 
@@ -301,20 +317,21 @@ const parseArgs = (input: Token[][], state: ParserState): CallArgumentAstNode[] 
 
     if (matchToken(input, state, TokenKind.LeftParen)) {
         for (let i = 0; getToken(input, state).kind !== TokenKind.RightParen; i++) {
-            if (matchToken(input, state, TokenKind.Dot)) {
+            const dot = matchToken(input, state, TokenKind.Dot);
+
+            if (dot) {
                 const name = matchToken(input, state, TokenKind.Identifier);
 
                 if (!name) {
-                    reportError("Expected variable name to reference", state);
+                    reportError("Expected variable name to reference", input, state);
                     return;
                 }
 
                 args.push({
                     kind: AstNodeKind.Reference,
-                    name: {
-                        kind: AstNodeKind.Identifier,
-                        text: name.text,
-                    },
+                    name: makeIdentifierAstNode(name),
+                    start: dot.start,
+                    end: name.end,
                 });
             } else {
                 const expression = parseExpression(input, state);
@@ -332,7 +349,7 @@ const parseArgs = (input: Token[][], state: ParserState): CallArgumentAstNode[] 
         }
 
         if (!matchToken(input, state, TokenKind.RightParen)) {
-            reportError("Unterminated argument list", state);
+            reportError("Unterminated argument list", input, state);
             return;
         }
     }
@@ -359,7 +376,7 @@ const parseSubscripts = (input: Token[][], state: ParserState): ExpressionAstNod
         }
 
         if (!matchToken(input, state, TokenKind.RightParen)) {
-            reportError("Unterminated subscript list", state);
+            reportError("Unterminated subscript list", input, state);
             return;
         }
     }
@@ -371,7 +388,7 @@ const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefine
     const nameToken = getToken(input, state);
 
     if (nameToken.kind !== TokenKind.Identifier) {
-        reportError("Expected an identifier", state);
+        reportError("Expected an identifier", input, state);
         return;
     }
 
@@ -383,13 +400,14 @@ const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefine
         return;
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Call,
-        name: {
-            kind: AstNodeKind.Identifier,
-            text: nameToken.text,
-        },
+        name: makeIdentifierAstNode(nameToken),
         args,
+        start: nameToken.start,
+        end: lastToken.end,
     };
 };
 
@@ -397,7 +415,7 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
     const firstToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!firstToken) {
-        reportError("Expected variable to start with an identifier", state);
+        reportError("Expected variable to start with an identifier", input, state);
         return;
     }
 
@@ -407,13 +425,14 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
         return;
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Variable,
-        name: {
-            kind: AstNodeKind.Identifier,
-            text: firstToken.text,
-        },
+        name: makeIdentifierAstNode(firstToken),
         subscripts: subscripts,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
@@ -421,12 +440,12 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
     const builtinName = matchToken(input, state, TokenKind.Identifier);
 
     if (!builtinName) {
-        reportError("Expected builtin name", state);
+        reportError("Expected builtin name", input, state);
         return;
     }
 
     if (!matchToken(input, state, TokenKind.LeftParen)) {
-        reportError("Expected argument list after builtin name", state);
+        reportError("Expected argument list after builtin name", input, state);
         return;
     }
 
@@ -444,14 +463,16 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
         node = {
             kind: AstNodeKind.Order,
             variable,
+            start: builtinName.start,
+            end: builtinName.end,
         };
     } else {
-        reportError("Unrecognized builtin", state);
+        reportErrorAt("Unrecognized builtin", builtinName, state);
         return;
     }
 
     if (!matchToken(input, state, TokenKind.RightParen)) {
-        reportError("Unterminated argument list", state);
+        reportError("Unterminated argument list", input, state);
         return;
     }
 
@@ -478,6 +499,8 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
             return {
                 kind: AstNodeKind.StringLiteral,
                 value: firstToken.value,
+                start: firstToken.start,
+                end: firstToken.end,
             };
         case TokenKind.Number:
             nextToken(input, state);
@@ -485,6 +508,8 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
             return {
                 kind: AstNodeKind.NumberLiteral,
                 value: firstToken.value,
+                start: firstToken.start,
+                end: firstToken.end,
             };
         case TokenKind.Identifier:
             return parseVariable(input, state);
@@ -498,14 +523,14 @@ const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode |
             }
 
             if (!matchToken(input, state, TokenKind.RightParen)) {
-                reportError("Unterminated parenthesis", state);
+                reportError("Unterminated parenthesis", input, state);
                 return;
             }
 
             return expression;
         }
         default:
-            reportError("Expected an expression", state);
+            reportError("Expected an expression", input, state);
             return;
     }
 };
@@ -542,6 +567,8 @@ const parseUnaryOp = (input: Token[][], state: ParserState): ExpressionAstNode |
         kind: AstNodeKind.UnaryOp,
         right,
         op,
+        start: token.start,
+        end: right.end,
     };
 };
 
@@ -618,6 +645,8 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
             right,
             op,
             isNegated,
+            start: left.start,
+            end: right.end,
         };
     }
 
@@ -655,7 +684,7 @@ const parseBlock = (
                     }
 
                     if (!matchToken(input, state, TokenKind.Space)) {
-                        reportError("Expected space after dot", state);
+                        reportError("Expected space after dot", input, state);
                         return;
                     }
                 }
@@ -678,6 +707,8 @@ const parseBlock = (
 };
 
 const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
     // TODO: Support formatting with ?.
     const args: WriteArgumentAstNode[] = [];
 
@@ -710,16 +741,24 @@ const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefi
         }
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Write,
         args,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
 const parseQuit = (input: Token[][], state: ParserState): QuitAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
     if (getWhitespace(input, state)) {
         return {
             kind: AstNodeKind.Quit,
+            start: firstToken.start,
+            end: firstToken.end,
         };
     }
 
@@ -729,9 +768,13 @@ const parseQuit = (input: Token[][], state: ParserState): QuitAstNode | undefine
         return;
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Quit,
         returnValue,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
@@ -742,6 +785,8 @@ const parseDo = (
     if (!getWhitespace(input, state)) {
         return parseCall(input, state);
     }
+
+    const firstToken = getToken(input, state);
 
     const startLine = state.position.line;
     const startColumn = state.position.column;
@@ -758,15 +803,21 @@ const parseDo = (
     state.position.line = startLine;
     state.position.column = startColumn;
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.DoBlock,
         children: block,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
 const parseIf = (input: Token[][], state: ParserState): IfAstNode | undefined => {
     const conditions: ExpressionAstNode[] = [];
     const children: CommandAstNode[] = [];
+
+    const firstToken = getToken(input, state);
 
     while (!matchWhitespace(input, state)) {
         const expression = parseExpression(input, state);
@@ -779,7 +830,7 @@ const parseIf = (input: Token[][], state: ParserState): IfAstNode | undefined =>
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             if (!matchWhitespace(input, state)) {
-                reportError("Expected space after if conditions", state);
+                reportError("Expected space after if conditions", input, state);
                 return;
             }
 
@@ -797,19 +848,24 @@ const parseIf = (input: Token[][], state: ParserState): IfAstNode | undefined =>
         children.push(command);
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.If,
         conditions,
         children,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
 const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefined => {
     if (!matchWhitespace(input, state)) {
-        reportError("Expected no arguments for else command", state);
+        reportError("Expected no arguments for else command", input, state);
         return;
     }
 
+    const firstToken = getToken(input, state);
     const children: CommandAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
@@ -822,9 +878,13 @@ const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefine
         children.push(command);
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Else,
         children,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
@@ -836,7 +896,7 @@ const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstN
     }
 
     if (!matchToken(input, state, TokenKind.Equals)) {
-        reportError("Expected equals after for loop variable", state);
+        reportError("Expected equals after for loop variable", input, state);
         return;
     }
 
@@ -856,21 +916,27 @@ const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstN
         }
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.ForArgument,
         variable,
         expressions,
+        start: variable.start,
+        end: lastToken.end,
     };
 };
 
 const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
     let arg: ForArgumentAstNode | undefined;
 
     if (!matchWhitespace(input, state)) {
         arg = parseForArgument(input, state);
 
         if (!matchWhitespace(input, state)) {
-            reportError("Expected space after for loop argument", state);
+            reportError("Expected space after for loop argument", input, state);
             return;
         }
     }
@@ -887,14 +953,20 @@ const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined 
         children.push(command);
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.For,
         arg,
         children,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
 const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
     const args: SetArgumentAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
@@ -905,7 +977,7 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
         }
 
         if (!matchToken(input, state, TokenKind.Equals)) {
-            reportError("Expected equals after identifier in set command", state);
+            reportError("Expected equals after identifier in set command", input, state);
             return;
         }
 
@@ -919,6 +991,8 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
             kind: AstNodeKind.SetArgument,
             variable,
             value: expression,
+            start: variable.start,
+            end: expression.end,
         });
 
         if (!matchToken(input, state, TokenKind.Comma)) {
@@ -926,13 +1000,19 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
         }
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.Set,
         args,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
 const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {
+    const firstToken = getToken(input, state);
+
     const args: IdentifierAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
@@ -942,19 +1022,20 @@ const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined 
             return;
         }
 
-        args.push({
-            kind: AstNodeKind.Identifier,
-            text: token.text,
-        });
+        args.push(makeIdentifierAstNode(token));
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
     }
 
+    const lastToken = getToken(input, state);
+
     return {
         kind: AstNodeKind.New,
         args,
+        start: firstToken.start,
+        end: lastToken.end,
     };
 };
 
@@ -962,7 +1043,7 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
     const nameToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!nameToken) {
-        reportError("Expected command name", state);
+        reportError("Expected command name", input, state);
         return;
     }
 
@@ -977,7 +1058,7 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
     }
 
     if (!matchWhitespace(input, state)) {
-        reportError("Expected space between command and arguments", state);
+        reportError("Expected space between command and arguments", input, state);
         return;
     }
 
@@ -1003,7 +1084,7 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
     } else if ("new".startsWith(lowerCaseName)) {
         body = parseNew(input, state);
     } else {
-        reportError("Unrecognized command name", state);
+        reportErrorAt("Unrecognized command name", nameToken, state);
     }
 
     if (!body) {
@@ -1011,7 +1092,7 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
     }
 
     if (!matchWhitespace(input, state)) {
-        reportError("Expected space between arguments and next commands", state);
+        reportError("Expected space between arguments and next commands", input, state);
         return;
     }
 
@@ -1019,6 +1100,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         kind: AstNodeKind.Command,
         condition,
         body,
+        start: nameToken.start,
+        end: body.end,
     };
 };
 
@@ -1035,7 +1118,7 @@ const parseTag = (input: Token[][], state: ParserState): string[] | null | undef
 
             if (!paramToken) {
                 if (i > 0) {
-                    reportError("Expected parameter name", state);
+                    reportError("Expected parameter name", input, state);
                 }
 
                 break;
@@ -1049,13 +1132,13 @@ const parseTag = (input: Token[][], state: ParserState): string[] | null | undef
         }
 
         if (!matchToken(input, state, TokenKind.RightParen)) {
-            reportError("Unterminated parameter list", state);
+            reportError("Unterminated parameter list", input, state);
             return;
         }
     }
 
     if (!matchWhitespace(input, state)) {
-        reportError("Expected space after tag name", state);
+        reportError("Expected space after tag name", input, state);
         return;
     }
 
@@ -1067,7 +1150,14 @@ const parseTopLevel = (input: Token[][], state: ParserState): TopLevelAstNode | 
         kind: AstNodeKind.TopLevel,
         tags: new Map(),
         children: [],
+        start: { line: 0, column: 0 },
+        end: { line: 0, column: 0 },
     };
+
+    if (input.length > 0) {
+        const lastLine = input[input.length - 1];
+        topLevel.end = lastLine[lastLine.length - 1].end;
+    }
 
     while (state.position.line < input.length) {
         const firstToken = getToken(input, state);
@@ -1089,7 +1179,7 @@ const parseTopLevel = (input: Token[][], state: ParserState): TopLevelAstNode | 
                 });
             }
         } else if (!matchWhitespace(input, state)) {
-            reportError("Expected leading space", state);
+            reportError("Expected leading space", input, state);
             return;
         }
 

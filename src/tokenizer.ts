@@ -1,4 +1,5 @@
 import { MError } from "./mError.js";
+import { TextRange } from "./textRange.js";
 
 export const enum TokenKind {
     // No leading whitespace on a line indicates the first identifier is a tag name.
@@ -29,7 +30,7 @@ export const enum TokenKind {
     Colon,
 }
 
-interface BasicToken {
+interface BasicToken extends TextRange {
     kind:
         | TokenKind.LeadingWhitespace
         | TokenKind.TrailingWhitespace
@@ -55,17 +56,17 @@ interface BasicToken {
         | TokenKind.Colon;
 }
 
-interface IdentifierToken {
+export interface IdentifierToken extends TextRange {
     kind: TokenKind.Identifier;
     text: string;
 }
 
-interface NumberToken {
+interface NumberToken extends TextRange {
     kind: TokenKind.Number;
     value: number;
 }
 
-interface StringToken {
+interface StringToken extends TextRange {
     kind: TokenKind.String;
     value: string;
 }
@@ -108,6 +109,14 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
     if (x > 0) {
         tokens.push({
             kind: TokenKind.LeadingWhitespace,
+            start: {
+                line: y,
+                column: 0,
+            },
+            end: {
+                line: y,
+                column: x,
+            },
         });
     }
 
@@ -130,6 +139,14 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             tokens.push({
                 kind: TokenKind.Identifier,
                 text: line.slice(start, x),
+                start: {
+                    line: y,
+                    column: start,
+                },
+                end: {
+                    line: y,
+                    column: x,
+                },
             });
 
             continue;
@@ -149,13 +166,24 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
             tokens.push({
                 kind: TokenKind.Number,
                 value: Number.parseFloat(line.slice(start, x)),
+                start: {
+                    line: y,
+                    column: start,
+                },
+                end: {
+                    line: y,
+                    column: x,
+                },
             });
 
             continue;
         }
 
+        let kind: TokenKind;
+
         switch (firstChar) {
             case '"': {
+                const start = x;
                 const chars = [];
 
                 x++;
@@ -184,115 +212,82 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
                     x += 2;
                 }
 
+                x++;
+
                 tokens.push({
                     kind: TokenKind.String,
                     value: chars.join(""),
+                    start: {
+                        line: y,
+                        column: start,
+                    },
+                    end: {
+                        line: y,
+                        column: x,
+                    },
                 });
-
-                x++;
 
                 continue;
             }
-            // TODO: Collapse all of these similar cases.
             case " ":
-                tokens.push({
-                    kind: TokenKind.Space,
-                });
+                kind = TokenKind.Space;
                 break;
             case "(":
-                tokens.push({
-                    kind: TokenKind.LeftParen,
-                });
+                kind = TokenKind.LeftParen;
                 break;
             case ")":
-                tokens.push({
-                    kind: TokenKind.RightParen,
-                });
+                kind = TokenKind.RightParen;
                 break;
             case ",":
-                tokens.push({
-                    kind: TokenKind.Comma,
-                });
+                kind = TokenKind.Comma;
                 break;
             case "^":
-                tokens.push({
-                    kind: TokenKind.Caret,
-                });
+                kind = TokenKind.Caret;
                 break;
             case "$":
-                tokens.push({
-                    kind: TokenKind.Dollar,
-                });
+                kind = TokenKind.Dollar;
                 break;
             case "#":
-                tokens.push({
-                    kind: TokenKind.Hash,
-                });
+                kind = TokenKind.Hash;
                 break;
             case ".":
-                tokens.push({
-                    kind: TokenKind.Dot,
-                });
+                kind = TokenKind.Dot;
                 break;
             case "+":
-                tokens.push({
-                    kind: TokenKind.Plus,
-                });
+                kind = TokenKind.Plus;
                 break;
             case "-":
-                tokens.push({
-                    kind: TokenKind.Minus,
-                });
+                kind = TokenKind.Minus;
                 break;
             case "*":
-                tokens.push({
-                    kind: TokenKind.Asterisk,
-                });
+                kind = TokenKind.Asterisk;
                 break;
             case "/":
-                tokens.push({
-                    kind: TokenKind.ForwardSlash,
-                });
+                kind = TokenKind.ForwardSlash;
                 break;
             case "_":
-                tokens.push({
-                    kind: TokenKind.Underscore,
-                });
+                kind = TokenKind.Underscore;
                 break;
             case "!":
-                tokens.push({
-                    kind: TokenKind.ExclamationPoint,
-                });
+                kind = TokenKind.ExclamationPoint;
                 break;
             case "&":
-                tokens.push({
-                    kind: TokenKind.Ampersand,
-                });
+                kind = TokenKind.Ampersand;
                 break;
             case "=":
-                tokens.push({
-                    kind: TokenKind.Equals,
-                });
+                kind = TokenKind.Equals;
                 break;
             case "<":
-                tokens.push({
-                    kind: TokenKind.LessThan,
-                });
+                kind = TokenKind.LessThan;
                 break;
             case ">":
-                tokens.push({
-                    kind: TokenKind.GreaterThan,
-                });
+                kind = TokenKind.GreaterThan;
                 break;
             case "'":
-                tokens.push({
-                    kind: TokenKind.SingleQuote,
-                });
+                kind = TokenKind.SingleQuote;
                 break;
             case ":":
-                tokens.push({
-                    kind: TokenKind.Colon,
-                });
+                kind = TokenKind.Colon;
                 break;
             default:
                 errors.push({
@@ -300,14 +295,36 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
                     line: y,
                     column: x,
                 });
-                break;
+
+                x++;
+                continue;
         }
+
+        tokens.push({
+            kind,
+            start: {
+                line: y,
+                column: x,
+            },
+            end: {
+                line: y,
+                column: x + 1,
+            },
+        });
 
         x++;
     }
 
     tokens.push({
         kind: TokenKind.TrailingWhitespace,
+        start: {
+            line: y,
+            column: x,
+        },
+        end: {
+            line: y,
+            column: x + 1,
+        },
     });
 
     return tokens;

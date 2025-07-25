@@ -13,6 +13,7 @@ import {
 } from "./mArray.js";
 import { MError } from "./mError.js";
 import {
+    AstNode,
     AstNodeKind,
     BinaryOp,
     BinaryOpAstNode,
@@ -206,12 +207,11 @@ const setVariable = (
     return true;
 };
 
-const reportError = (message: string, state: InterpreterState) => {
+const reportError = (message: string, node: AstNode, state: InterpreterState) => {
     state.errors.push({
         message,
-        // TODO: These values need to be stored in the AST to be available here.
-        line: 0,
-        column: 0,
+        line: node.start.line,
+        column: node.start.column,
     });
 };
 
@@ -223,7 +223,7 @@ const interpretCall = (
     const tag = state.ast.tags.get(node.name.text);
 
     if (tag === undefined) {
-        reportError(`Tag "${node.name.text}" not found`, state);
+        reportError(`Tag "${node.name.text}" not found`, node, state);
         return false;
     }
 
@@ -295,7 +295,7 @@ const interpretUnaryOp = (node: UnaryOpAstNode, state: InterpreterState): boolea
             value = -mValueToNumber(right);
             break;
         default:
-            reportError("Unimplemented unary op", state);
+            reportError("Unimplemented unary op", node, state);
             return false;
     }
 
@@ -350,7 +350,7 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
             value = mValueToString(left) + mValueToString(right);
             break;
         default:
-            reportError("Unimplemented binary op", state);
+            reportError("Unimplemented binary op", node, state);
             return false;
     }
 
@@ -706,7 +706,7 @@ const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult 
                 state,
             );
         default:
-            reportError("Invalid number of expressions in for argument", state);
+            reportError("Invalid number of expressions in for argument", node, state);
             return CommandResult.Halt;
     }
 };
@@ -785,7 +785,7 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
                 ? CommandResult.Continue
                 : CommandResult.Halt;
         default:
-            reportError("Unrecognized command", state);
+            reportError("Unrecognized command", node, state);
             return CommandResult.Halt;
     }
 };
