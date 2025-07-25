@@ -27,7 +27,7 @@ export const enum AstNodeKind {
     UnaryOp,
     ExclamationPointFormatter,
     HashFormatter,
-    Order,
+    Builtin,
 }
 
 interface Tag {
@@ -136,7 +136,7 @@ export type ExpressionAstNode =
     | CallAstNode
     | UnaryOpAstNode
     | BinaryOpAstNode
-    | OrderAstNode;
+    | BuiltinAstNode;
 
 export interface IdentifierAstNode extends TextRange {
     kind: AstNodeKind.Identifier;
@@ -198,9 +198,15 @@ export interface BinaryOpAstNode extends TextRange {
     isNegated: boolean;
 }
 
-export interface OrderAstNode extends TextRange {
-    kind: AstNodeKind.Order;
-    variable: VariableAstNode;
+export const enum BuiltinKind {
+    Order,
+    Length,
+}
+
+export interface BuiltinAstNode extends TextRange {
+    kind: AstNodeKind.Builtin;
+    builtinKind: BuiltinKind;
+    args: ExpressionAstNode[];
 }
 
 export interface ExclamationFormatter {
@@ -456,23 +462,20 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
         return;
     }
 
+    const args = parseExpressionList(input, state);
+
+    if (!args) {
+        return;
+    }
+
     const lowerCaseBuiltinName = builtinName.text.toLowerCase();
 
-    let node: ExpressionAstNode;
+    let builtinKind: BuiltinKind;
 
     if ("order".startsWith(lowerCaseBuiltinName)) {
-        const variable = parseVariable(input, state);
-
-        if (!variable) {
-            return;
-        }
-
-        node = {
-            kind: AstNodeKind.Order,
-            variable,
-            start: builtinName.start,
-            end: builtinName.end,
-        };
+        builtinKind = BuiltinKind.Order;
+    } else if ("length".startsWith(lowerCaseBuiltinName)) {
+        builtinKind = BuiltinKind.Length;
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;
@@ -483,7 +486,13 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
         return;
     }
 
-    return node;
+    return {
+        kind: AstNodeKind.Builtin,
+        builtinKind,
+        args,
+        start: builtinName.start,
+        end: builtinName.end,
+    };
 };
 
 const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
@@ -1038,6 +1047,29 @@ const parseIdentifierList = (
     }
 
     return identifiers;
+};
+
+const parseExpressionList = (
+    input: Token[][],
+    state: ParserState,
+): ExpressionAstNode[] | undefined => {
+    const expressions: ExpressionAstNode[] = [];
+
+    while (!matchWhitespace(input, state)) {
+        const expression = parseExpression(input, state);
+
+        if (!expression) {
+            return;
+        }
+
+        expressions.push(expression);
+
+        if (!matchToken(input, state, TokenKind.Comma)) {
+            break;
+        }
+    }
+
+    return expressions;
 };
 
 const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {

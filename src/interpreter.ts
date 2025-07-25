@@ -17,6 +17,8 @@ import {
     AstNodeKind,
     BinaryOp,
     BinaryOpAstNode,
+    BuiltinAstNode,
+    BuiltinKind,
     CallAstNode,
     CommandAstNode,
     DoBlockAstNode,
@@ -26,7 +28,6 @@ import {
     IfAstNode,
     KillAstNode,
     NewAstNode,
-    OrderAstNode,
     QuitAstNode,
     SetArgumentAstNode,
     SetAstNode,
@@ -365,25 +366,31 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     return true;
 };
 
-const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean => {
-    const name = node.variable.name.text;
+const interpretOrder = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+    if (node.args.length !== 1 || node.args[0].kind !== AstNodeKind.Variable) {
+        reportError("Expected a single variable argument to order builtin", node, state);
+        return false;
+    }
+
+    const variable = node.args[0];
+    const name = variable.name.text;
     const reference = getVariableReference(name, state);
 
     let value = getReferenceValue(reference, state);
 
-    if (!value || node.variable.subscripts.length === 0) {
+    if (!value || variable.subscripts.length === 0) {
         state.valueStack.push("");
         return true;
     }
 
     // TODO: Find a way to consolidate the multiple places where we need to look up or set variables with subscripts.
-    for (let i = 0; i < node.variable.subscripts.length - 1; i++) {
+    for (let i = 0; i < variable.subscripts.length - 1; i++) {
         if (typeof value !== "object") {
             state.valueStack.push("");
             return true;
         }
 
-        const subscript = interpretExpression(node.variable.subscripts[i], state);
+        const subscript = interpretExpression(variable.subscripts[i], state);
 
         if (!subscript) {
             return false;
@@ -404,7 +411,7 @@ const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean =>
     }
 
     const finalSubscript = interpretExpression(
-        node.variable.subscripts[node.variable.subscripts.length - 1],
+        variable.subscripts[variable.subscripts.length - 1],
         state,
     );
 
@@ -417,6 +424,31 @@ const interpretOrder = (node: OrderAstNode, state: InterpreterState): boolean =>
 
     state.valueStack.push(nextKey);
     return true;
+};
+
+const interpretLength = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+    if (node.args.length !== 1) {
+        reportError("Expected one argument to length builtin", node, state);
+        return false;
+    }
+
+    if (!interpretExpression(node.args[0], state)) {
+        return false;
+    }
+
+    const value = mValueToString(state.valueStack.pop()!);
+    state.valueStack.push(value.length);
+
+    return true;
+};
+
+const interpretBuiltin = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+    switch (node.builtinKind) {
+        case BuiltinKind.Order:
+            return interpretOrder(node, state);
+        case BuiltinKind.Length:
+            return interpretLength(node, state);
+    }
 };
 
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
@@ -440,8 +472,8 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             return interpretUnaryOp(node, state);
         case AstNodeKind.BinaryOp:
             return interpretBinaryOp(node, state);
-        case AstNodeKind.Order:
-            return interpretOrder(node, state);
+        case AstNodeKind.Builtin:
+            return interpretBuiltin(node, state);
     }
 
     return true;

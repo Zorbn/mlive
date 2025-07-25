@@ -212,3 +212,16 @@ test("kill all variables", () => {
         ``,
     );
 });
+
+test("length", () => {
+    assertScript(
+        `
+        w !,$L("hello world")
+        n letters
+        s letters="abcdefghijklmnopqrstuvwxyz"
+        w !,$LeNgTh(letters)`,
+        `
+11
+26`,
+    );
+});
