@@ -1,4 +1,4 @@
-# MLive
+# MScript
 
 ## An M interpreter that can run in your browser.
 
