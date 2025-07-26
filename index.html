@@ -4,16 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="index.css" rel="stylesheet">
     <title>MLive</title>
 </head>
 
 <body>
     <script src="dist/index.js" type="module" defer></script>
 </body>
-    <textarea id="inputTextArea" rows="24" cols="80"></textarea>
-    <br>
-    <button id="evaluateButton">Evaluate</button>
-    <button id="copyLinkButton">Copy Link</button>
-    <br>
-    <textarea id="outputTextArea" rows="24" cols="80" readonly></textarea>
+    <div id="container">
+        <h1>MLive</h1>
+        <textarea id="inputTextArea" class="shadow"></textarea>
+        <div id="buttonContainer">
+            <button id="evaluateButton" class="shadow">Evaluate</button>
+            <button id="copyLinkButton" class="shadow">Copy Link</button>
+        </div>
+        <textarea id="outputTextArea" class="shadow" readonly></textarea>
+    </div>
 </html>
