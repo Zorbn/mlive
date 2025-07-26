@@ -35,6 +35,13 @@ h1 {
     text-align: center;
     margin: 0px;
     text-shadow: 2px 2px 2px #d0d0d8;
+    transform: scale(1.2, 1.0);
+}
+
+.condensed {
+    letter-spacing: -0.25rem;
+    font-style: italic;
+    color: #404088;
 }
 
 #buttonContainer {
