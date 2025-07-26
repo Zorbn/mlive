@@ -105,6 +105,30 @@ inputTextArea.addEventListener("beforeinput", (event) => {
 });
 
 inputTextArea.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        event.preventDefault();
+
+        let lineStart = inputTextArea.selectionStart;
+
+        while (lineStart > 0 && inputTextArea.value[lineStart - 1] !== "\n") {
+            lineStart--;
+        }
+
+        let indentationEnd = lineStart;
+
+        while ([" ", "\t"].includes(inputTextArea.value[indentationEnd])) {
+            indentationEnd++;
+        }
+
+        const nextIndentation =
+            indentationEnd > lineStart
+                ? inputTextArea.value.slice(lineStart, indentationEnd)
+                : "    ";
+
+        insertIntoTextArea("\n" + nextIndentation, inputTextArea);
+        return;
+    }
+
     if (event.key === "Tab") {
         event.preventDefault();
         insertIntoTextArea("    ", inputTextArea);
