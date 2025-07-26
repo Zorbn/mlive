@@ -116,12 +116,15 @@ inputTextArea.addEventListener("keydown", (event) => {
 
         let indentationEnd = lineStart;
 
-        while ([" ", "\t"].includes(inputTextArea.value[indentationEnd])) {
+        while (
+            indentationEnd < inputTextArea.selectionStart &&
+            [" ", "\t"].includes(inputTextArea.value[indentationEnd])
+        ) {
             indentationEnd++;
         }
 
         const nextIndentation =
-            indentationEnd > lineStart
+            inputTextArea.selectionStart === indentationEnd || indentationEnd > lineStart
                 ? inputTextArea.value.slice(lineStart, indentationEnd)
                 : "    ";
 
