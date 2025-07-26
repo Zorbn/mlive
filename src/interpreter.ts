@@ -815,6 +815,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
     }
 
     switch (node.body.kind) {
+        case AstNodeKind.Comment:
+            return CommandResult.Continue;
         case AstNodeKind.Write:
             return interpretWrite(node.body, state);
         case AstNodeKind.Quit:

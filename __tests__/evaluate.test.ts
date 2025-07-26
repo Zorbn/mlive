@@ -178,6 +178,14 @@ test("comments", () => {
         `
 5`,
     );
+
+    assertScript(` w !,"Hi"; This comment should be in a command position`, ``, [
+        {
+            line: 0,
+            column: 9,
+            message: "Expected space between arguments and next commands",
+        },
+    ]);
 });
 
 test("kill one identifier", () => {

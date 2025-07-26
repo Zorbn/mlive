@@ -4,6 +4,7 @@ import { IdentifierToken, Token, TokenKind } from "./tokenizer.js";
 
 export const enum AstNodeKind {
     TopLevel,
+    Comment,
     Write,
     Quit,
     Do,
@@ -39,6 +40,10 @@ export interface TopLevelAstNode extends TextRange {
     kind: AstNodeKind.TopLevel;
     tags: Map<string, Tag>;
     children: CommandAstNode[];
+}
+
+export interface CommentAstNode extends TextRange {
+    kind: AstNodeKind.Comment;
 }
 
 export interface WriteAstNode extends TextRange {
@@ -104,6 +109,7 @@ export interface KillAstNode extends TextRange {
 }
 
 export type CommandBodyAstNode =
+    | CommentAstNode
     | WriteAstNode
     | QuitAstNode
     | CallAstNode
@@ -1111,6 +1117,21 @@ const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefine
 };
 
 const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
+    const commentToken = matchToken(input, state, TokenKind.Comment);
+
+    if (commentToken) {
+        return {
+            kind: AstNodeKind.Command,
+            body: {
+                kind: AstNodeKind.Comment,
+                start: commentToken.start,
+                end: commentToken.end,
+            },
+            start: commentToken.start,
+            end: commentToken.end,
+        };
+    }
+
     const nameToken = matchToken(input, state, TokenKind.Identifier);
 
     if (!nameToken) {

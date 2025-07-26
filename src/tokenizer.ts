@@ -6,6 +6,8 @@ export const enum TokenKind {
     LeadingWhitespace,
     TrailingWhitespace,
     Space,
+    // Comments must start in positions where a command could appear.
+    Comment,
     Identifier,
     Number,
     String,
@@ -35,6 +37,7 @@ interface BasicToken extends TextRange {
         | TokenKind.LeadingWhitespace
         | TokenKind.TrailingWhitespace
         | TokenKind.Space
+        | TokenKind.Comment
         | TokenKind.LeftParen
         | TokenKind.RightParen
         | TokenKind.Comma
@@ -124,6 +127,17 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
         const firstChar = line[x];
 
         if (firstChar === ";") {
+            tokens.push({
+                kind: TokenKind.Comment,
+                start: {
+                    line: y,
+                    column: x,
+                },
+                end: {
+                    line: y,
+                    column: line.length,
+                },
+            });
             break;
         }
 
