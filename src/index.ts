@@ -3,6 +3,7 @@ import { MError } from "./mError.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
+const clearButton = document.getElementById("clearButton") as HTMLButtonElement;
 const copyLinkButton = document.getElementById("copyLinkButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
 
@@ -135,6 +136,10 @@ evaluateButton.addEventListener("click", () => {
         console.log(`Evaluation completed successfully in ${end - start}ms!`);
         outputTextArea.value = result.output;
     }
+});
+
+clearButton.addEventListener("click", () => {
+    outputTextArea.value = "";
 });
 
 copyLinkButton.addEventListener("click", () => {
