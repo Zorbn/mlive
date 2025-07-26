@@ -2,11 +2,11 @@ html {
     height: 100%;
     font-family: sans-serif;
     background-image: repeating-linear-gradient(
-    -45deg,
-    #f0f0f0,
-    #f0f0f0 10px,
-    #e0e0e0 10px,
-    #e0e0e0 20px
+        -45deg,
+        #f0f0f0,
+        #f0f0f0 10px,
+        #e8e8e8 10px,
+        #e8e8e8 20px
   );
 }
 
@@ -28,13 +28,13 @@ body {
 }
 
 .shadow {
-    box-shadow: 2px 2px 2px #aeaeae;
+    box-shadow: 2px 2px 2px #d0d0d0;
 }
 
 h1 {
     text-align: center;
     margin: 0px;
-    text-shadow: 2px 2px 2px #aeaeae;
+    text-shadow: 2px 2px 2px #d0d0d0;
 }
 
 #buttonContainer {
