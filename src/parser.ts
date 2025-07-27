@@ -17,6 +17,7 @@ export const enum AstNodeKind {
     Set,
     New,
     Kill,
+    Merge,
     Identifier,
     Variable,
     NumberLiteral,
@@ -105,7 +106,13 @@ export interface NewAstNode extends TextRange {
 
 export interface KillAstNode extends TextRange {
     kind: AstNodeKind.Kill;
-    args: IdentifierAstNode[];
+    args: VariableAstNode[];
+}
+
+export interface MergeAstNode extends TextRange {
+    kind: AstNodeKind.Merge;
+    left: VariableAstNode;
+    right: VariableAstNode;
 }
 
 export type CommandBodyAstNode =
@@ -120,7 +127,8 @@ export type CommandBodyAstNode =
     | ForAstNode
     | SetAstNode
     | NewAstNode
-    | KillAstNode;
+    | KillAstNode
+    | MergeAstNode;
 
 export interface CommandAstNode extends TextRange {
     kind: AstNodeKind.Command;
@@ -323,11 +331,11 @@ const reportError = (message: string, input: Token[][], state: ParserState) => {
     reportErrorAt(message, token, state);
 };
 
-const reportErrorAt = (message: string, token: Token, state: ParserState) => {
+const reportErrorAt = (message: string, textRange: TextRange, state: ParserState) => {
     state.errors.push({
         message,
-        line: token.start.line,
-        column: token.start.column,
+        line: textRange.start.line,
+        column: textRange.start.column,
     });
 };
 
@@ -468,7 +476,7 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
         return;
     }
 
-    const args = parseExpressionList(input, state);
+    const args = parseNodeList(input, state, parseExpression);
 
     if (!args) {
         return;
@@ -1055,27 +1063,28 @@ const parseIdentifierList = (
     return identifiers;
 };
 
-const parseExpressionList = (
+const parseNodeList = <T>(
     input: Token[][],
     state: ParserState,
-): ExpressionAstNode[] | undefined => {
-    const expressions: ExpressionAstNode[] = [];
+    parser: (input: Token[][], state: ParserState) => T | undefined,
+): T[] | undefined => {
+    const nodes: T[] = [];
 
     while (!matchWhitespace(input, state)) {
-        const expression = parseExpression(input, state);
+        const expression = parser(input, state);
 
         if (!expression) {
             return;
         }
 
-        expressions.push(expression);
+        nodes.push(expression);
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
     }
 
-    return expressions;
+    return nodes;
 };
 
 const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined => {
@@ -1100,10 +1109,23 @@ const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined 
 const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefined => {
     const firstToken = getToken(input, state);
 
-    const args = parseIdentifierList(input, state);
+    const args = parseNodeList(input, state, parseVariable);
 
     if (!args) {
         return;
+    }
+
+    if (args.length > 1) {
+        for (const arg of args) {
+            if (arg.subscripts.length > 0) {
+                reportErrorAt(
+                    "If multiple variables are passed to kill, the variables must not have subscripts",
+                    arg,
+                    state,
+                );
+                return;
+            }
+        }
     }
 
     const lastToken = getToken(input, state);
@@ -1113,6 +1135,33 @@ const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefine
         args,
         start: firstToken.start,
         end: lastToken.end,
+    };
+};
+
+const parseMerge = (input: Token[][], state: ParserState): MergeAstNode | undefined => {
+    const left = parseVariable(input, state);
+
+    if (!left) {
+        return;
+    }
+
+    if (!matchToken(input, state, TokenKind.Equals)) {
+        reportError("Expected equals between variables to merge", input, state);
+        return;
+    }
+
+    const right = parseVariable(input, state);
+
+    if (!right) {
+        return;
+    }
+
+    return {
+        kind: AstNodeKind.Merge,
+        left,
+        right,
+        start: left.start,
+        end: right.end,
     };
 };
 
@@ -1177,6 +1226,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         body = parseNew(input, state);
     } else if ("kill".startsWith(lowerCaseName)) {
         body = parseKill(input, state);
+    } else if ("merge".startsWith(lowerCaseName)) {
+        body = parseMerge(input, state);
     } else {
         reportErrorAt("Unrecognized command name", nameToken, state);
     }

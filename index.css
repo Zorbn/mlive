@@ -1,6 +1,7 @@
 html {
     height: 100%;
     font-family: sans-serif;
+    background-color: #e8e8ef;
     background-image: repeating-linear-gradient(
         -45deg,
         #f0f0f8,

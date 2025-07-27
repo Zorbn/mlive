@@ -10,6 +10,8 @@ import {
     mValueToScalar,
     MReference,
     MObjectKind,
+    mArrayKill,
+    mValueCopy,
 } from "./mArray.js";
 import { MError } from "./mError.js";
 import {
@@ -27,6 +29,7 @@ import {
     ForAstNode,
     IfAstNode,
     KillAstNode,
+    MergeAstNode,
     NewAstNode,
     QuitAstNode,
     SetArgumentAstNode,
@@ -98,54 +101,69 @@ const setSpecialVariable = (name: string, value: MValue, state: InterpreterState
     state.environmentStack[0].set(name, value);
 };
 
-const getVariable = (node: VariableAstNode, state: InterpreterState): boolean => {
-    const name = node.name.text;
+const getSubscriptKey = (
+    node: VariableAstNode,
+    state: InterpreterState,
+    i: number,
+    subscriptValues?: string[],
+) => {
+    if (subscriptValues) {
+        return subscriptValues[i];
+    } else {
+        const subscript = interpretExpression(node.subscripts[i], state);
+
+        if (!subscript) {
+            return;
+        }
+
+        return mValueToString(state.valueStack.pop()!);
+    }
+};
+
+const getVariable = (
+    variable: VariableAstNode,
+    state: InterpreterState,
+    subscriptCount: number = variable.subscripts.length,
+    subscriptValues?: string[],
+): MValue | null | undefined => {
+    const name = variable.name.text;
     const reference = getVariableReference(name, state);
 
     let value = getReferenceValue(reference, state);
 
     if (!value) {
-        state.valueStack.push("");
-        return true;
+        return null;
     }
 
-    for (let i = 0; i < node.subscripts.length; i++) {
+    for (let i = 0; i < subscriptCount; i++) {
         if (typeof value !== "object") {
-            state.valueStack.push("");
-            return true;
+            return null;
         }
 
-        const subscript = interpretExpression(node.subscripts[i], state);
+        const subscriptKey = getSubscriptKey(variable, state, i, subscriptValues);
 
-        if (!subscript) {
-            return false;
+        if (!subscriptKey) {
+            return;
         }
 
-        const subscriptKey = mValueToString(state.valueStack.pop()!);
         value = mArrayGet(value, subscriptKey);
 
         if (!value) {
-            state.valueStack.push("");
-            return true;
+            return null;
         }
     }
 
-    state.valueStack.push(mValueToScalar(value));
-    return true;
+    return value;
 };
 
-const setVariable = (
+const getOrCreateArrayAtSubscript = (
     variable: VariableAstNode,
-    value: MValue,
     state: InterpreterState,
-): boolean => {
+    subscriptCount: number = variable.subscripts.length,
+    subscriptValues?: string[],
+): MArray | undefined => {
     const name = variable.name.text;
     const reference = getVariableReference(name, state);
-
-    if (variable.subscripts.length === 0) {
-        setReferenceValue(reference, value, state);
-        return true;
-    }
 
     let array = getReferenceValue(reference, state);
 
@@ -165,24 +183,16 @@ const setVariable = (
         setReferenceValue(reference, array, state);
     }
 
-    for (let i = 0; i < variable.subscripts.length - 1; i++) {
-        const subscript = interpretExpression(variable.subscripts[i], state);
+    for (let i = 0; i < subscriptCount; i++) {
+        const subscriptKey = getSubscriptKey(variable, state, i, subscriptValues);
 
-        if (!subscript) {
-            return false;
+        if (!subscriptKey) {
+            return;
         }
 
-        const subscriptKey = mValueToString(state.valueStack.pop()!);
         let innerArray = mArrayGet(array, subscriptKey);
 
-        if (!innerArray) {
-            innerArray = {
-                kind: MObjectKind.Array,
-                value: "",
-            };
-
-            mArraySet(array, subscriptKey, innerArray);
-        } else if (typeof array !== "object") {
+        if (typeof innerArray !== "object") {
             innerArray = {
                 kind: MObjectKind.Array,
                 value: innerArray as MScalar,
@@ -194,10 +204,30 @@ const setVariable = (
         array = innerArray as MArray;
     }
 
-    const finalSubscript = interpretExpression(
-        variable.subscripts[variable.subscripts.length - 1],
-        state,
-    );
+    return array;
+};
+
+const setVariable = (
+    variable: VariableAstNode,
+    value: MValue,
+    state: InterpreterState,
+): boolean => {
+    if (variable.subscripts.length === 0) {
+        const name = variable.name.text;
+        const reference = getVariableReference(name, state);
+
+        setReferenceValue(reference, value, state);
+        return true;
+    }
+
+    const lastSubscript = variable.subscripts.length - 1;
+    const array = getOrCreateArrayAtSubscript(variable, state, lastSubscript);
+
+    if (!array) {
+        return false;
+    }
+
+    const finalSubscript = interpretExpression(variable.subscripts[lastSubscript], state);
 
     if (!finalSubscript) {
         return false;
@@ -215,6 +245,20 @@ const reportError = (message: string, node: AstNode, state: InterpreterState) =>
         line: node.start.line,
         column: node.start.column,
     });
+};
+
+const interpretVariable = (node: VariableAstNode, state: InterpreterState): boolean => {
+    const value = getVariable(node, state);
+
+    if (value === undefined) {
+        return false;
+    } else if (value === null) {
+        state.valueStack.push("");
+        return true;
+    } else {
+        state.valueStack.push(mValueToScalar(value));
+        return true;
+    }
 };
 
 const interpretCall = (
@@ -373,39 +417,19 @@ const interpretOrder = (node: BuiltinAstNode, state: InterpreterState): boolean 
     }
 
     const variable = node.args[0];
-    const name = variable.name.text;
-    const reference = getVariableReference(name, state);
 
-    let value = getReferenceValue(reference, state);
-
-    if (!value || variable.subscripts.length === 0) {
+    if (variable.subscripts.length === 0) {
         state.valueStack.push("");
         return true;
     }
 
-    // TODO: Find a way to consolidate the multiple places where we need to look up or set variables with subscripts.
-    for (let i = 0; i < variable.subscripts.length - 1; i++) {
-        if (typeof value !== "object") {
-            state.valueStack.push("");
-            return true;
-        }
+    const value = getVariable(variable, state, variable.subscripts.length - 1);
 
-        const subscript = interpretExpression(variable.subscripts[i], state);
-
-        if (!subscript) {
-            return false;
-        }
-
-        const subscriptKey = mValueToString(state.valueStack.pop()!);
-        value = mArrayGet(value, subscriptKey);
-
-        if (!value) {
-            state.valueStack.push("");
-            return true;
-        }
+    if (value === undefined) {
+        return false;
     }
 
-    if (typeof value !== "object") {
+    if (value === null || typeof value !== "object") {
         state.valueStack.push("");
         return true;
     }
@@ -454,7 +478,7 @@ const interpretBuiltin = (node: BuiltinAstNode, state: InterpreterState): boolea
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
-            if (!getVariable(node, state)) {
+            if (!interpretVariable(node, state)) {
                 return false;
             }
 
@@ -640,7 +664,7 @@ const interpretForWithStartIncrement = (
                 return CommandResult.Continue;
         }
 
-        if (!getVariable(variable, state)) {
+        if (!interpretVariable(variable, state)) {
             return CommandResult.Halt;
         }
 
@@ -677,7 +701,7 @@ const interpretForWithStartIncrementEnd = (
     }
 
     while (true) {
-        if (!getVariable(variable, state)) {
+        if (!interpretVariable(variable, state)) {
             return CommandResult.Halt;
         }
 
@@ -697,7 +721,7 @@ const interpretForWithStartIncrementEnd = (
                 return CommandResult.Continue;
         }
 
-        if (!getVariable(variable, state)) {
+        if (!interpretVariable(variable, state)) {
             return CommandResult.Halt;
         }
 
@@ -792,12 +816,121 @@ const interpretKill = (node: KillAstNode, state: InterpreterState): CommandResul
         return CommandResult.Continue;
     }
 
+    const firstVariable = node.args[0];
+
+    if (node.args.length === 1 && firstVariable.subscripts.length > 0) {
+        const lastSubscript = firstVariable.subscripts.length - 1;
+        const value = getVariable(firstVariable, state, lastSubscript);
+
+        if (value === undefined) {
+            return CommandResult.Halt;
+        }
+
+        if (!interpretExpression(firstVariable.subscripts[lastSubscript], state)) {
+            return CommandResult.Halt;
+        }
+
+        const key = mValueToString(state.valueStack.pop()!);
+
+        if (value === null || typeof value !== "object") {
+            return CommandResult.Continue;
+        }
+
+        mArrayKill(value, key);
+
+        return CommandResult.Continue;
+    }
+
     for (const arg of node.args) {
         for (let i = state.environmentStack.length - 1; i >= 0; i--) {
-            if (state.environmentStack[i].delete(arg.text)) {
+            if (state.environmentStack[i].delete(arg.name.text)) {
                 break;
             }
         }
+    }
+
+    return CommandResult.Continue;
+};
+
+const interpretSubscripts = (
+    expressions: ExpressionAstNode[],
+    state: InterpreterState,
+): string[] | undefined => {
+    const values = [];
+
+    for (const subscript of expressions) {
+        if (!interpretExpression(subscript, state)) {
+            return;
+        }
+
+        values.push(mValueToString(state.valueStack.pop()!));
+    }
+
+    return values;
+};
+
+const interpretMerge = (node: MergeAstNode, state: InterpreterState): CommandResult => {
+    const leftSubscriptValues = interpretSubscripts(node.left.subscripts, state);
+
+    if (!leftSubscriptValues) {
+        return CommandResult.Halt;
+    }
+
+    const rightSubscriptValues = interpretSubscripts(node.right.subscripts, state);
+
+    if (!rightSubscriptValues) {
+        return CommandResult.Halt;
+    }
+
+    let doVariablesOverlap = node.left.name.text === node.right.name.text;
+
+    if (doVariablesOverlap) {
+        const overlappingSubscriptCount = Math.min(
+            leftSubscriptValues.length,
+            rightSubscriptValues.length,
+        );
+
+        for (let i = 0; i < overlappingSubscriptCount; i++) {
+            if (leftSubscriptValues[i] !== rightSubscriptValues[i]) {
+                doVariablesOverlap = false;
+                break;
+            }
+        }
+    }
+
+    if (doVariablesOverlap) {
+        reportError("Cannot merge overlapping variables", node, state);
+        return CommandResult.Halt;
+    }
+
+    const destination = getOrCreateArrayAtSubscript(
+        node.left,
+        state,
+        leftSubscriptValues.length,
+        leftSubscriptValues,
+    );
+
+    if (!destination) {
+        return CommandResult.Halt;
+    }
+
+    const source = getVariable(
+        node.right,
+        state,
+        rightSubscriptValues.length,
+        rightSubscriptValues,
+    );
+
+    if (source === undefined) {
+        return CommandResult.Halt;
+    }
+
+    if (source === null || typeof source !== "object" || !source.children) {
+        return CommandResult.Continue;
+    }
+
+    for (const pair of source.children) {
+        mArraySet(destination, pair.key, mValueCopy(pair.value));
     }
 
     return CommandResult.Continue;
@@ -835,6 +968,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretNew(node.body, state);
         case AstNodeKind.Kill:
             return interpretKill(node.body, state);
+        case AstNodeKind.Merge:
+            return interpretMerge(node.body, state);
         case AstNodeKind.Call:
             return interpretCall(node.body, state, false)
                 ? CommandResult.Continue

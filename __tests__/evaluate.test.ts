@@ -234,3 +234,55 @@ test("length", () => {
 26`,
     );
 });
+
+test("merge", () => {
+    assertScript(
+        `
+    s dst("a")="1",dst("b")="2",dst("c")="3"
+    s src("c")="4",src("d")="5"
+    m dst=src
+    n key
+    f  s key=$O(dst(key)) q:key=""  w !,"Key: ",key," -> Value: ",dst(key)`,
+        `
+Key: a -> Value: 1
+Key: b -> Value: 2
+Key: c -> Value: 4
+Key: d -> Value: 5`,
+    );
+});
+
+test("merge into subscript", () => {
+    assertScript(
+        `
+    s dst("a")="1",dst("b")="2",dst("c")="3",dst("d")="4"
+    s src("c")="4",src("d")="5"
+    k dst("b")
+    m dst("d")=src
+    n key
+    f  s key=$O(dst(key)) q:key=""  w !,"Key: ",key," -> Value: ",dst(key)
+    f  s key=$O(dst("d",key)) q:key=""  w !,"Within ""d"" { Key: ",key," -> Value: ",dst("d",key)," }"`,
+        `
+Key: a -> Value: 1
+Key: c -> Value: 3
+Key: d -> Value: 4
+Within "d" { Key: c -> Value: 4 }
+Within "d" { Key: d -> Value: 5 }`,
+    );
+});
+
+test("merge overlapping", () => {
+    assertScript(
+        `
+    s arr("a")="1",arr("b")="2",arr("c")="3"
+    s arr("inner","a")="4"
+    m arr=arr("inner")`,
+        ``,
+        [
+            {
+                line: 3,
+                column: 6,
+                message: "Cannot merge overlapping variables",
+            },
+        ],
+    );
+});

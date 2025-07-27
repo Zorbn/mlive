@@ -58,63 +58,96 @@ export const mValueToScalar = (value: MValue): MScalar => {
     return value;
 };
 
-export const mArraySet = (array: MArray, key: string, value: MValue) => {
-    const pair = {
-        key,
+export const mValueToArray = (value: MValue): MArray => {
+    if (typeof value === "object") {
+        return value;
+    }
+
+    return {
+        kind: MObjectKind.Array,
         value,
     };
+};
 
+export const mValueCopy = (value: MValue): MValue => {
+    if (typeof value !== "object") {
+        return value;
+    }
+
+    const copy: MArray = {
+        kind: MObjectKind.Array,
+        value: value.value,
+    };
+
+    if (value.children) {
+        for (const pair of value.children) {
+            mArraySet(copy, pair.key, mValueCopy(pair.value));
+        }
+    }
+
+    return copy;
+};
+
+export const mArraySet = (array: MArray, key: string, value: MValue) => {
     if (!array.children) {
-        array.children = [pair];
+        array.children = [{ key, value }];
         return;
+    }
+
+    const index = mArrayGetDesiredIndex(array, key);
+
+    if (index < array.children.length && array.children[index].key === key) {
+        array.children[index].value = value;
+    } else {
+        array.children.splice(index, 0, { key, value });
+    }
+};
+
+export const mArrayKill = (array: MArray, key: string) => {
+    const index = mArrayGetDesiredIndex(array, key);
+
+    if (array.children && index < array.children.length && array.children[index].key === key) {
+        array.children.splice(index, 1);
+    }
+};
+
+export const mArrayGet = (array: MArray, key: string) => {
+    const index = mArrayGetDesiredIndex(array, key);
+
+    if (array.children && index < array.children.length && array.children[index].key === key) {
+        return array.children[index].value;
+    }
+
+    return "";
+};
+
+const mArrayGetDesiredIndex = (array: MArray, key: string) => {
+    if (!array.children) {
+        return 0;
     }
 
     // TODO: This could use a binary search because keys are sorted.
     for (let i = 0; i < array.children.length; i++) {
         const pair = array.children[i];
 
-        if (pair.key === key) {
-            pair.value = value;
-            return;
-        }
-
-        if (key < pair.key) {
-            array.children.splice(i, 0, pair);
-            return;
+        if (key <= pair.key) {
+            return i;
         }
     }
 
-    array.children.push(pair);
-};
-
-export const mArrayGet = (array: MArray, key: string) => {
-    if (!array.children) {
-        return "";
-    }
-
-    // TODO: This could use a binary search because keys are sorted.
-    for (const pair of array.children) {
-        if (pair.key === key) {
-            return pair.value;
-        }
-
-        if (key < pair.key) {
-            return "";
-        }
-    }
+    return array.children.length;
 };
 
 export const mArrayGetNextKey = (array: MArray, key: string) => {
-    if (!array.children) {
+    let index = mArrayGetDesiredIndex(array, key);
+
+    if (!array.children || index >= array.children.length) {
         return "";
     }
 
-    // TODO: This could use a binary search because keys are sorted.
-    for (const pair of array.children) {
-        if (key < pair.key) {
-            return pair.key;
-        }
+    if (array.children[index].key === key) {
+        index++;
     }
 
-    return "";
+    return array.children[index]?.key ?? "";
 };
