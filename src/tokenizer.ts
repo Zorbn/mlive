@@ -22,6 +22,7 @@ export const enum TokenKind {
     Minus,
     Asterisk,
     ForwardSlash,
+    BackSlash,
     Underscore,
     ExclamationPoint,
     Ampersand,
@@ -49,6 +50,7 @@ interface BasicToken extends TextRange {
         | TokenKind.Minus
         | TokenKind.Asterisk
         | TokenKind.ForwardSlash
+        | TokenKind.BackSlash
         | TokenKind.Underscore
         | TokenKind.ExclamationPoint
         | TokenKind.Ampersand
@@ -278,6 +280,9 @@ const tokenizeLine = (line: string, y: number, errors: MError[]): Token[] => {
                 break;
             case "/":
                 kind = TokenKind.ForwardSlash;
+                break;
+            case "\\":
+                kind = TokenKind.BackSlash;
                 break;
             case "_":
                 kind = TokenKind.Underscore;

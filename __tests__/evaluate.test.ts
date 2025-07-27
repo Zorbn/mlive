@@ -34,6 +34,17 @@ test("simple math with parenthesis", () => {
     assertScript(` w 3+--(4-3)`, `4`);
 });
 
+test("division", () => {
+    assertScript(` w 5/2`, `2.5`);
+    assertScript(` w 5\\2`, `2`);
+});
+
+test("modulo", () => {
+    assertScript(` w 5#2`, `1`);
+    assertScript(` w 5.5#2`, `1.5`);
+    assertScript(` w -5#2`, `-1`);
+});
+
 test("left to right precedence", () => {
     assertScript(` w 3+4*3`, `21`);
     assertScript(` w 3+(4*3)`, `15`);

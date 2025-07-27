@@ -201,6 +201,8 @@ export const enum BinaryOp {
     Subtract,
     Multiply,
     Divide,
+    IntegerDivide,
+    Modulo,
     Concatenate,
 }
 
@@ -650,6 +652,12 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
                     break;
                 case TokenKind.ForwardSlash:
                     op = BinaryOp.Divide;
+                    break;
+                case TokenKind.BackSlash:
+                    op = BinaryOp.IntegerDivide;
+                    break;
+                case TokenKind.Hash:
+                    op = BinaryOp.Modulo;
                     break;
                 case TokenKind.Underscore:
                     op = BinaryOp.Concatenate;

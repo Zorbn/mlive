@@ -393,6 +393,12 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
         case BinaryOp.Divide:
             value = mValueToNumber(left) / mValueToNumber(right);
             break;
+        case BinaryOp.IntegerDivide:
+            value = Math.floor(mValueToNumber(left) / mValueToNumber(right));
+            break;
+        case BinaryOp.Modulo:
+            value = mValueToNumber(left) % mValueToNumber(right);
+            break;
         case BinaryOp.Concatenate:
             value = mValueToString(left) + mValueToString(right);
             break;
