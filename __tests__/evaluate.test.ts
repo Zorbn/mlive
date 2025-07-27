@@ -31,6 +31,7 @@ test("simple math", () => {
 
 test("simple math with parenthesis", () => {
     assertScript(` w 3+-(4-3)`, `2`);
+    assertScript(` w 3+--(4-3)`, `4`);
 });
 
 test("left to right precedence", () => {

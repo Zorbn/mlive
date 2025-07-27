@@ -579,7 +579,7 @@ const parseUnaryOp = (input: Token[][], state: ParserState): ExpressionAstNode |
 
     nextToken(input, state);
 
-    const right = parsePrimary(input, state);
+    const right = parseUnaryOp(input, state);
 
     if (!right) {
         return;
