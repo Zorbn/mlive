@@ -7,7 +7,7 @@ html {
         #f0f0f8 10px,
         #e8e8ef 10px,
         #e8e8ef 20px
-  );
+    );
 }
 
 body {
@@ -25,6 +25,7 @@ body {
     max-width: 750px;
     gap: 0.25rem;
     padding: 0.25rem;
+    overflow: hidden;
 }
 
 .shadow {
