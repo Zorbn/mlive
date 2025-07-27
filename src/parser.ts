@@ -1115,19 +1115,6 @@ const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefine
         return;
     }
 
-    if (args.length > 1) {
-        for (const arg of args) {
-            if (arg.subscripts.length > 0) {
-                reportErrorAt(
-                    "If multiple variables are passed to kill, the variables must not have subscripts",
-                    arg,
-                    state,
-                );
-                return;
-            }
-        }
-    }
-
     const lastToken = getToken(input, state);
 
     return {

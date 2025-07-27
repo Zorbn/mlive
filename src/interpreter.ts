@@ -816,32 +816,29 @@ const interpretKill = (node: KillAstNode, state: InterpreterState): CommandResul
         return CommandResult.Continue;
     }
 
-    const firstVariable = node.args[0];
-
-    if (node.args.length === 1 && firstVariable.subscripts.length > 0) {
-        const lastSubscript = firstVariable.subscripts.length - 1;
-        const value = getVariable(firstVariable, state, lastSubscript);
-
-        if (value === undefined) {
-            return CommandResult.Halt;
-        }
-
-        if (!interpretExpression(firstVariable.subscripts[lastSubscript], state)) {
-            return CommandResult.Halt;
-        }
-
-        const key = mValueToString(state.valueStack.pop()!);
-
-        if (value === null || typeof value !== "object") {
-            return CommandResult.Continue;
-        }
-
-        mArrayKill(value, key);
-
-        return CommandResult.Continue;
-    }
-
     for (const arg of node.args) {
+        if (arg.subscripts.length > 0) {
+            const lastSubscript = arg.subscripts.length - 1;
+            const value = getVariable(arg, state, lastSubscript);
+
+            if (value === undefined) {
+                return CommandResult.Halt;
+            }
+
+            if (!interpretExpression(arg.subscripts[lastSubscript], state)) {
+                return CommandResult.Halt;
+            }
+
+            const key = mValueToString(state.valueStack.pop()!);
+
+            if (value === null || typeof value !== "object") {
+                return CommandResult.Continue;
+            }
+
+            mArrayKill(value, key);
+            continue;
+        }
+
         for (let i = state.environmentStack.length - 1; i >= 0; i--) {
             if (state.environmentStack[i].delete(arg.name.text)) {
                 break;
