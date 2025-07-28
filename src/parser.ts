@@ -217,6 +217,7 @@ export interface BinaryOpAstNode extends TextRange {
 export const enum BuiltinKind {
     Order,
     Length,
+    Extract,
 }
 
 export interface BuiltinAstNode extends TextRange {
@@ -492,6 +493,8 @@ const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode |
         builtinKind = BuiltinKind.Order;
     } else if ("length".startsWith(lowerCaseBuiltinName)) {
         builtinKind = BuiltinKind.Length;
+    } else if ("extract".startsWith(lowerCaseBuiltinName)) {
+        builtinKind = BuiltinKind.Extract;
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;

@@ -472,12 +472,52 @@ const interpretLength = (node: BuiltinAstNode, state: InterpreterState): boolean
     return true;
 };
 
+const interpretExtract = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+    if (node.args.length < 1 || node.args.length > 3) {
+        reportError("Expected between one and three arguments for extract builtin", node, state);
+        return false;
+    }
+
+    if (!interpretExpression(node.args[0], state)) {
+        return false;
+    }
+
+    const value = mValueToString(state.valueStack.pop()!);
+
+    let start = 0;
+    let end;
+
+    if (node.args.length >= 2) {
+        if (!interpretExpression(node.args[1], state)) {
+            return false;
+        }
+
+        start = mValueToNumber(state.valueStack.pop()!) - 1;
+    }
+
+    if (node.args.length >= 3) {
+        if (!interpretExpression(node.args[2], state)) {
+            return false;
+        }
+
+        end = mValueToNumber(state.valueStack.pop()!);
+    } else {
+        end = start + 1;
+    }
+
+    state.valueStack.push(value.slice(start, end));
+
+    return true;
+};
+
 const interpretBuiltin = (node: BuiltinAstNode, state: InterpreterState): boolean => {
     switch (node.builtinKind) {
         case BuiltinKind.Order:
             return interpretOrder(node, state);
         case BuiltinKind.Length:
             return interpretLength(node, state);
+        case BuiltinKind.Extract:
+            return interpretExtract(node, state);
     }
 };
 

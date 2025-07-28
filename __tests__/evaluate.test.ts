@@ -297,3 +297,17 @@ test("merge overlapping", () => {
         ],
     );
 });
+
+test("extract", () => {
+    assertScript(
+        `
+    s string="Hello, world!"
+    w !,$E(string)
+    w !,$E(string,6)
+    w !,$E(string,3,5)`,
+        `
+H
+,
+llo`,
+    );
+});
