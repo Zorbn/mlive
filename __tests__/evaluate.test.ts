@@ -332,3 +332,33 @@ Bello! world!
 Ae110! world!`,
     );
 });
+
+test("set non settable builtins", () => {
+    assertScript(
+        `
+    s arr("a")="b"
+    s $O(arr("a"))="c"`,
+        ``,
+        [
+            {
+                line: 2,
+                column: 7,
+                message: "Extract is the only settable builtin",
+            },
+        ],
+    );
+
+    assertScript(
+        `
+    s string="Hello, world!"
+    s $L(string)="Goodbye, world!"`,
+        ``,
+        [
+            {
+                line: 2,
+                column: 7,
+                message: "Extract is the only settable builtin",
+            },
+        ],
+    );
+});
