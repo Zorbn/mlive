@@ -311,3 +311,24 @@ H
 llo`,
     );
 });
+
+test("set extract", () => {
+    assertScript(
+        `
+    s string="Hello, world!"
+    s $E(string)="A"
+    w !,string
+    s $E(string,6)="!"
+    w !,string
+    s arr("string")=string
+    s $E(arr("string"))="B"
+    w !,arr("string")
+    s $E(string,3,5)="110"
+    w !,string`,
+        `
+Aello, world!
+Aello! world!
+Bello! world!
+Ae110! world!`,
+    );
+});

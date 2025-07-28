@@ -227,9 +227,7 @@ const setVariable = (
         return false;
     }
 
-    const finalSubscript = interpretExpression(variable.subscripts[lastSubscript], state);
-
-    if (!finalSubscript) {
+    if (!interpretExpression(variable.subscripts[lastSubscript], state)) {
         return false;
     }
 
@@ -429,27 +427,24 @@ const interpretOrder = (node: BuiltinAstNode, state: InterpreterState): boolean 
         return true;
     }
 
-    const value = getVariable(variable, state, variable.subscripts.length - 1);
+    const lastSubscript = variable.subscripts.length - 1;
+    const value = getVariable(variable, state, lastSubscript);
 
     if (value === undefined) {
         return false;
     }
+
+    if (!interpretExpression(variable.subscripts[lastSubscript], state)) {
+        return false;
+    }
+
+    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
 
     if (value === null || typeof value !== "object") {
         state.valueStack.push("");
         return true;
     }
 
-    const finalSubscript = interpretExpression(
-        variable.subscripts[variable.subscripts.length - 1],
-        state,
-    );
-
-    if (!finalSubscript) {
-        return false;
-    }
-
-    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
     const nextKey = mArrayGetNextKey(value, finalSubscriptKey);
 
     state.valueStack.push(nextKey);
@@ -472,9 +467,45 @@ const interpretLength = (node: BuiltinAstNode, state: InterpreterState): boolean
     return true;
 };
 
-const interpretExtract = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+const verifyExtractionArgs = (node: BuiltinAstNode, state: InterpreterState): boolean => {
     if (node.args.length < 1 || node.args.length > 3) {
         reportError("Expected between one and three arguments for extract builtin", node, state);
+        return false;
+    }
+
+    return true;
+};
+
+const getExtractionStart = (node: BuiltinAstNode, state: InterpreterState): number | undefined => {
+    if (node.args.length >= 2) {
+        if (!interpretExpression(node.args[1], state)) {
+            return;
+        }
+
+        return mValueToNumber(state.valueStack.pop()!) - 1;
+    }
+
+    return 0;
+};
+
+const getExtractionEnd = (
+    node: BuiltinAstNode,
+    state: InterpreterState,
+    start: number,
+): number | undefined => {
+    if (node.args.length >= 3) {
+        if (!interpretExpression(node.args[2], state)) {
+            return;
+        }
+
+        return mValueToNumber(state.valueStack.pop()!);
+    }
+
+    return start + 1;
+};
+
+const interpretExtract = (node: BuiltinAstNode, state: InterpreterState): boolean => {
+    if (!verifyExtractionArgs(node, state)) {
         return false;
     }
 
@@ -483,26 +514,16 @@ const interpretExtract = (node: BuiltinAstNode, state: InterpreterState): boolea
     }
 
     const value = mValueToString(state.valueStack.pop()!);
+    const start = getExtractionStart(node, state);
 
-    let start = 0;
-    let end;
-
-    if (node.args.length >= 2) {
-        if (!interpretExpression(node.args[1], state)) {
-            return false;
-        }
-
-        start = mValueToNumber(state.valueStack.pop()!) - 1;
+    if (start === undefined) {
+        return false;
     }
 
-    if (node.args.length >= 3) {
-        if (!interpretExpression(node.args[2], state)) {
-            return false;
-        }
+    const end = getExtractionEnd(node, state, start);
 
-        end = mValueToNumber(state.valueStack.pop()!);
-    } else {
-        end = start + 1;
+    if (end === undefined) {
+        return false;
     }
 
     state.valueStack.push(value.slice(start, end));
@@ -815,6 +836,75 @@ const interpretFor = (node: ForAstNode, state: InterpreterState): CommandResult 
     }
 };
 
+const replaceStringRange = (destination: string, source: string, start: number, end: number) => {
+    const before = destination.slice(0, start);
+    const after = destination.slice(end);
+
+    return `${before}${source}${after}`;
+};
+
+const interpretSetExtract = (node: BuiltinAstNode, state: InterpreterState, value: string) => {
+    if (!verifyExtractionArgs(node, state)) {
+        return CommandResult.Halt;
+    }
+
+    if (node.args[0].kind !== AstNodeKind.Variable) {
+        return CommandResult.Halt;
+    }
+
+    const start = getExtractionStart(node, state);
+
+    if (start === undefined) {
+        return CommandResult.Halt;
+    }
+
+    const end = getExtractionEnd(node, state, start);
+
+    if (end === undefined) {
+        return CommandResult.Halt;
+    }
+
+    const variable = node.args[0];
+
+    if (variable.kind !== AstNodeKind.Variable) {
+        return CommandResult.Continue;
+    }
+
+    if (variable.subscripts.length === 0) {
+        const reference = getVariableReference(variable.name.text, state);
+        const destination = mValueToString(getReferenceValue(reference, state) ?? "");
+        const newValue = replaceStringRange(destination, value, start, end);
+
+        setReferenceValue(reference, newValue, state);
+
+        return CommandResult.Continue;
+    }
+
+    const lastSubscript = variable.subscripts.length - 1;
+    const array = getVariable(variable, state, lastSubscript);
+
+    if (array === undefined) {
+        return CommandResult.Halt;
+    }
+
+    if (!interpretExpression(variable.subscripts[lastSubscript], state)) {
+        return CommandResult.Halt;
+    }
+
+    const finalSubscriptKey = mValueToString(state.valueStack.pop()!);
+
+    if (array === null || typeof array !== "object") {
+        return CommandResult.Continue;
+    }
+
+    const destination = mValueToString(mArrayGet(array, finalSubscriptKey));
+    const newValue = replaceStringRange(destination, value, start, end);
+
+    mArraySet(array, finalSubscriptKey, newValue);
+
+    return CommandResult.Continue;
+};
+
 const interpretVariableSetArgument = (
     node: SetArgumentAstNode,
     state: InterpreterState,
@@ -825,7 +915,11 @@ const interpretVariableSetArgument = (
 
     const value = state.valueStack.pop()!;
 
-    return setVariable(node.variable, value, state) ? CommandResult.Continue : CommandResult.Halt;
+    if (node.target.kind === AstNodeKind.Builtin) {
+        return interpretSetExtract(node.target, state, mValueToString(value));
+    }
+
+    return setVariable(node.target, value, state) ? CommandResult.Continue : CommandResult.Halt;
 };
 
 const interpretSet = (node: SetAstNode, state: InterpreterState): CommandResult => {

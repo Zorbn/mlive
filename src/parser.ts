@@ -90,7 +90,7 @@ export interface ElseAstNode extends TextRange {
 
 export interface SetArgumentAstNode extends TextRange {
     kind: AstNodeKind.SetArgument;
-    variable: VariableAstNode;
+    target: VariableAstNode | BuiltinAstNode;
     value: ExpressionAstNode;
 }
 
@@ -466,7 +466,7 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
     };
 };
 
-const parseBuiltin = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
+const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | undefined => {
     const builtinName = matchToken(input, state, TokenKind.Identifier);
 
     if (!builtinName) {
@@ -1011,9 +1011,20 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
     const args: SetArgumentAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
-        const variable = parseVariable(input, state);
+        let target;
 
-        if (!variable) {
+        if (matchToken(input, state, TokenKind.Dollar)) {
+            target = parseBuiltin(input, state);
+
+            if (target && target.builtinKind !== BuiltinKind.Extract) {
+                reportErrorAt("Extract is the only settable builtin", target, state);
+                return;
+            }
+        } else {
+            target = parseVariable(input, state);
+        }
+
+        if (!target) {
             return;
         }
 
@@ -1030,9 +1041,9 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
 
         args.push({
             kind: AstNodeKind.SetArgument,
-            variable,
+            target,
             value: expression,
-            start: variable.start,
+            start: target.start,
             end: expression.end,
         });
 
