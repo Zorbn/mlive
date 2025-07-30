@@ -362,3 +362,25 @@ test("set non settable builtins", () => {
         ],
     );
 });
+
+test("select", () => {
+    assertScript(
+        `
+    s var=$S(0:"a",1&1:"b",1!1:"c")
+    w var`,
+        `b`,
+    );
+
+    assertScript(
+        `
+    s var=$S(0:"a",1&0:"b",0!0:"c")`,
+        ``,
+        [
+            {
+                line: 1,
+                column: 11,
+                message: "All select conditions were false",
+            },
+        ],
+    );
+});

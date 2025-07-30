@@ -29,7 +29,9 @@ export const enum AstNodeKind {
     UnaryOp,
     ExclamationPointFormatter,
     HashFormatter,
-    Builtin,
+    BasicBuiltin,
+    SelectBuiltin,
+    SelectBuiltinArg,
 }
 
 interface Tag {
@@ -88,15 +90,15 @@ export interface ElseAstNode extends TextRange {
     children: CommandAstNode[];
 }
 
-export interface SetArgumentAstNode extends TextRange {
+export interface SetArgAstNode extends TextRange {
     kind: AstNodeKind.SetArgument;
-    target: VariableAstNode | BuiltinAstNode;
+    target: VariableAstNode | BasicBuiltinAstNode;
     value: ExpressionAstNode;
 }
 
 export interface SetAstNode extends TextRange {
     kind: AstNodeKind.Set;
-    args: SetArgumentAstNode[];
+    args: SetArgAstNode[];
 }
 
 export interface NewAstNode extends TextRange {
@@ -214,17 +216,30 @@ export interface BinaryOpAstNode extends TextRange {
     isNegated: boolean;
 }
 
-export const enum BuiltinKind {
+export const enum BasicBuiltinKind {
     Order,
     Length,
     Extract,
 }
 
-export interface BuiltinAstNode extends TextRange {
-    kind: AstNodeKind.Builtin;
-    builtinKind: BuiltinKind;
+export interface BasicBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.BasicBuiltin;
+    builtinKind: BasicBuiltinKind;
     args: ExpressionAstNode[];
 }
+
+export interface SelectBuiltinArgAstNode extends TextRange {
+    kind: AstNodeKind.SelectBuiltinArg;
+    condition: ExpressionAstNode;
+    value: ExpressionAstNode;
+}
+
+export interface SelectBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.SelectBuiltin;
+    args: SelectBuiltinArgAstNode[];
+}
+
+export type BuiltinAstNode = BasicBuiltinAstNode | SelectBuiltinAstNode;
 
 export interface ExclamationFormatter {
     kind: AstNodeKind.ExclamationPointFormatter;
@@ -437,7 +452,7 @@ const parseCall = (input: Token[][], state: ParserState): CallAstNode | undefine
         name: makeIdentifierAstNode(nameToken),
         args,
         start: nameToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -462,7 +477,82 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
         name: makeIdentifierAstNode(firstToken),
         subscripts: subscripts,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
+    };
+};
+
+const parseBuiltinArgs = <T>(
+    input: Token[][],
+    state: ParserState,
+    parser: (input: Token[][], state: ParserState) => T | undefined,
+): T[] | undefined => {
+    if (!matchToken(input, state, TokenKind.LeftParen)) {
+        reportError("Expected argument list after builtin name", input, state);
+        return;
+    }
+
+    const args = parseNodeList(input, state, parser);
+
+    if (!args) {
+        return;
+    }
+
+    if (!matchToken(input, state, TokenKind.RightParen)) {
+        reportError("Unterminated argument list", input, state);
+        return;
+    }
+
+    return args;
+};
+
+const parseSelectBuiltinArg = (
+    input: Token[][],
+    state: ParserState,
+): SelectBuiltinArgAstNode | undefined => {
+    const condition = parseExpression(input, state);
+
+    if (!condition) {
+        return;
+    }
+
+    if (!matchToken(input, state, TokenKind.Colon)) {
+        reportError("Expected colon between select condition and value", input, state);
+        return;
+    }
+
+    const value = parseExpression(input, state);
+
+    if (!value) {
+        return;
+    }
+
+    return {
+        kind: AstNodeKind.SelectBuiltinArg,
+        condition,
+        value,
+        start: condition.start,
+        end: value.end,
+    };
+};
+
+const parseSelectBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): BuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseSelectBuiltinArg);
+
+    if (!args) {
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.SelectBuiltin,
+        args,
+        start: builtinName.start,
+        end: lastToken.start,
     };
 };
 
@@ -474,43 +564,39 @@ const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | un
         return;
     }
 
-    if (!matchToken(input, state, TokenKind.LeftParen)) {
-        reportError("Expected argument list after builtin name", input, state);
-        return;
-    }
-
-    const args = parseNodeList(input, state, parseExpression);
-
-    if (!args) {
-        return;
-    }
-
     const lowerCaseBuiltinName = builtinName.text.toLowerCase();
 
-    let builtinKind: BuiltinKind;
+    let builtinKind: BasicBuiltinKind;
 
     if ("order".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BuiltinKind.Order;
+        builtinKind = BasicBuiltinKind.Order;
     } else if ("length".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BuiltinKind.Length;
+        builtinKind = BasicBuiltinKind.Length;
     } else if ("extract".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BuiltinKind.Extract;
+        builtinKind = BasicBuiltinKind.Extract;
+    } else if ("select".startsWith(lowerCaseBuiltinName)) {
+        return parseSelectBuiltin(input, state, builtinName);
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;
     }
 
-    if (!matchToken(input, state, TokenKind.RightParen)) {
-        reportError("Unterminated argument list", input, state);
+    // TODO: Maybe split BasicBuiltin into multiple nodes that are parsed with the help of parseBuiltinArgs,
+    // this would also allow verifying the argument count for each built in call while parsing.
+    const args = parseBuiltinArgs(input, state, parseExpression);
+
+    if (!args) {
         return;
     }
 
+    const lastToken = getToken(input, state);
+
     return {
-        kind: AstNodeKind.Builtin,
+        kind: AstNodeKind.BasicBuiltin,
         builtinKind,
         args,
         start: builtinName.start,
-        end: builtinName.end,
+        end: lastToken.start,
     };
 };
 
@@ -788,7 +874,7 @@ const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefi
         kind: AstNodeKind.Write,
         args,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -815,7 +901,7 @@ const parseQuit = (input: Token[][], state: ParserState): QuitAstNode | undefine
         kind: AstNodeKind.Quit,
         returnValue,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -850,7 +936,7 @@ const parseDo = (
         kind: AstNodeKind.DoBlock,
         children: block,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -896,7 +982,7 @@ const parseIf = (input: Token[][], state: ParserState): IfAstNode | undefined =>
         conditions,
         children,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -925,7 +1011,7 @@ const parseElse = (input: Token[][], state: ParserState): ElseAstNode | undefine
         kind: AstNodeKind.Else,
         children,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -964,7 +1050,7 @@ const parseForArgument = (input: Token[][], state: ParserState): ForArgumentAstN
         variable,
         expressions,
         start: variable.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -1001,14 +1087,14 @@ const parseFor = (input: Token[][], state: ParserState): ForAstNode | undefined 
         arg,
         children,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
 const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined => {
     const firstToken = getToken(input, state);
 
-    const args: SetArgumentAstNode[] = [];
+    const args: SetArgAstNode[] = [];
 
     while (!matchWhitespace(input, state)) {
         let target;
@@ -1016,7 +1102,11 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
         if (matchToken(input, state, TokenKind.Dollar)) {
             target = parseBuiltin(input, state);
 
-            if (target && target.builtinKind !== BuiltinKind.Extract) {
+            if (
+                target &&
+                (target.kind !== AstNodeKind.BasicBuiltin ||
+                    target.builtinKind !== BasicBuiltinKind.Extract)
+            ) {
                 reportErrorAt("Extract is the only settable builtin", target, state);
                 return;
             }
@@ -1058,7 +1148,7 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
         kind: AstNodeKind.Set,
         args,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -1124,7 +1214,7 @@ const parseNew = (input: Token[][], state: ParserState): NewAstNode | undefined 
         kind: AstNodeKind.New,
         args,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
@@ -1143,7 +1233,7 @@ const parseKill = (input: Token[][], state: ParserState): KillAstNode | undefine
         kind: AstNodeKind.Kill,
         args,
         start: firstToken.start,
-        end: lastToken.end,
+        end: lastToken.start,
     };
 };
 
