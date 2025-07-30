@@ -1105,6 +1105,8 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
             return interpretKill(node.body, state);
         case AstNodeKind.Merge:
             return interpretMerge(node.body, state);
+        case AstNodeKind.Halt:
+            return CommandResult.Halt;
         case AstNodeKind.Call:
             return interpretCall(node.body, state, false)
                 ? CommandResult.Continue

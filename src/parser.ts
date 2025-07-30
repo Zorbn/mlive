@@ -18,6 +18,7 @@ export const enum AstNodeKind {
     New,
     Kill,
     Merge,
+    Halt,
     Identifier,
     Variable,
     NumberLiteral,
@@ -119,6 +120,10 @@ export interface MergeAstNode extends TextRange {
     right: VariableAstNode;
 }
 
+export interface HaltAstNode extends TextRange {
+    kind: AstNodeKind.Halt;
+}
+
 export type CommandBodyAstNode =
     | CommentAstNode
     | WriteAstNode
@@ -132,7 +137,8 @@ export type CommandBodyAstNode =
     | SetAstNode
     | NewAstNode
     | KillAstNode
-    | MergeAstNode;
+    | MergeAstNode
+    | HaltAstNode;
 
 export interface CommandAstNode extends TextRange {
     kind: AstNodeKind.Command;
@@ -1331,6 +1337,16 @@ const parseMerge = (input: Token[][], state: ParserState): MergeAstNode | undefi
     };
 };
 
+const parseHalt = (input: Token[][], state: ParserState): HaltAstNode => {
+    const token = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.Halt,
+        start: token.start,
+        end: token.end,
+    };
+};
+
 const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | undefined => {
     const commentToken = matchToken(input, state, TokenKind.Comment);
 
@@ -1394,6 +1410,8 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
         body = parseKill(input, state);
     } else if ("merge".startsWith(lowerCaseName)) {
         body = parseMerge(input, state);
+    } else if ("halt".startsWith(lowerCaseName)) {
+        body = parseHalt(input, state);
     } else {
         reportErrorAt("Unrecognized command name", nameToken, state);
     }

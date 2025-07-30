@@ -384,3 +384,13 @@ test("select", () => {
         ],
     );
 });
+
+test("halt", () => {
+    assertScript(
+        `
+    w "a"
+    h
+    w "b"`,
+        `a`,
+    );
+});
