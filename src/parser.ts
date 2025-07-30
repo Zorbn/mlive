@@ -29,7 +29,9 @@ export const enum AstNodeKind {
     UnaryOp,
     ExclamationPointFormatter,
     HashFormatter,
-    BasicBuiltin,
+    OrderBuiltin,
+    LengthBuiltin,
+    ExtractBuiltin,
     SelectBuiltin,
     SelectBuiltinArg,
 }
@@ -92,7 +94,7 @@ export interface ElseAstNode extends TextRange {
 
 export interface SetArgAstNode extends TextRange {
     kind: AstNodeKind.SetArgument;
-    target: VariableAstNode | BasicBuiltinAstNode;
+    target: VariableAstNode | ExtractBuiltinAstNode;
     value: ExpressionAstNode;
 }
 
@@ -216,15 +218,18 @@ export interface BinaryOpAstNode extends TextRange {
     isNegated: boolean;
 }
 
-export const enum BasicBuiltinKind {
-    Order,
-    Length,
-    Extract,
+export interface OrderBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.OrderBuiltin;
+    arg: VariableAstNode;
 }
 
-export interface BasicBuiltinAstNode extends TextRange {
-    kind: AstNodeKind.BasicBuiltin;
-    builtinKind: BasicBuiltinKind;
+export interface LengthBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.LengthBuiltin;
+    arg: ExpressionAstNode;
+}
+
+export interface ExtractBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.ExtractBuiltin;
     args: ExpressionAstNode[];
 }
 
@@ -239,7 +244,11 @@ export interface SelectBuiltinAstNode extends TextRange {
     args: SelectBuiltinArgAstNode[];
 }
 
-export type BuiltinAstNode = BasicBuiltinAstNode | SelectBuiltinAstNode;
+export type BuiltinAstNode =
+    | OrderBuiltinAstNode
+    | LengthBuiltinAstNode
+    | ExtractBuiltinAstNode
+    | SelectBuiltinAstNode;
 
 export interface ExclamationFormatter {
     kind: AstNodeKind.ExclamationPointFormatter;
@@ -535,6 +544,88 @@ const parseSelectBuiltinArg = (
     };
 };
 
+const parseOrderBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): BuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseVariable);
+
+    if (!args) {
+        return;
+    }
+
+    if (args.length !== 1) {
+        reportErrorAt("Expected one argument for the order builtin", builtinName, state);
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.OrderBuiltin,
+        arg: args[0],
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
+const parseLengthBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): BuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseExpression);
+
+    if (!args) {
+        return;
+    }
+
+    if (args.length !== 1) {
+        reportErrorAt("Expected one argument for the length builtin", builtinName, state);
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.LengthBuiltin,
+        arg: args[0],
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
+const parseExtractBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): BuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseExpression);
+
+    if (!args) {
+        return;
+    }
+
+    if (args.length < 1 || args.length > 3) {
+        reportErrorAt(
+            "Expected between one and three arguments for extract builtin",
+            builtinName,
+            state,
+        );
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.ExtractBuiltin,
+        args,
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
 const parseSelectBuiltin = (
     input: Token[][],
     state: ParserState,
@@ -566,38 +657,18 @@ const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | un
 
     const lowerCaseBuiltinName = builtinName.text.toLowerCase();
 
-    let builtinKind: BasicBuiltinKind;
-
     if ("order".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BasicBuiltinKind.Order;
+        return parseOrderBuiltin(input, state, builtinName);
     } else if ("length".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BasicBuiltinKind.Length;
+        return parseLengthBuiltin(input, state, builtinName);
     } else if ("extract".startsWith(lowerCaseBuiltinName)) {
-        builtinKind = BasicBuiltinKind.Extract;
+        return parseExtractBuiltin(input, state, builtinName);
     } else if ("select".startsWith(lowerCaseBuiltinName)) {
         return parseSelectBuiltin(input, state, builtinName);
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;
     }
-
-    // TODO: Maybe split BasicBuiltin into multiple nodes that are parsed with the help of parseBuiltinArgs,
-    // this would also allow verifying the argument count for each built in call while parsing.
-    const args = parseBuiltinArgs(input, state, parseExpression);
-
-    if (!args) {
-        return;
-    }
-
-    const lastToken = getToken(input, state);
-
-    return {
-        kind: AstNodeKind.BasicBuiltin,
-        builtinKind,
-        args,
-        start: builtinName.start,
-        end: lastToken.start,
-    };
 };
 
 const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
@@ -1102,11 +1173,7 @@ const parseSet = (input: Token[][], state: ParserState): SetAstNode | undefined 
         if (matchToken(input, state, TokenKind.Dollar)) {
             target = parseBuiltin(input, state);
 
-            if (
-                target &&
-                (target.kind !== AstNodeKind.BasicBuiltin ||
-                    target.builtinKind !== BasicBuiltinKind.Extract)
-            ) {
+            if (target && target.kind !== AstNodeKind.ExtractBuiltin) {
                 reportErrorAt("Extract is the only settable builtin", target, state);
                 return;
             }

@@ -19,8 +19,6 @@ import {
     AstNodeKind,
     BinaryOp,
     BinaryOpAstNode,
-    BasicBuiltinAstNode,
-    BasicBuiltinKind,
     CallAstNode,
     CommandAstNode,
     DoBlockAstNode,
@@ -40,6 +38,9 @@ import {
     VariableAstNode,
     WriteAstNode,
     SelectBuiltinAstNode,
+    OrderBuiltinAstNode,
+    LengthBuiltinAstNode,
+    ExtractBuiltinAstNode,
 } from "./parser.js";
 
 type Environment = Map<string, MValue | MReference>;
@@ -415,13 +416,8 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
     return true;
 };
 
-const interpretOrder = (node: BasicBuiltinAstNode, state: InterpreterState): boolean => {
-    if (node.args.length !== 1 || node.args[0].kind !== AstNodeKind.Variable) {
-        reportError("Expected a single variable argument to order builtin", node, state);
-        return false;
-    }
-
-    const variable = node.args[0];
+const interpretOrderBuiltin = (node: OrderBuiltinAstNode, state: InterpreterState): boolean => {
+    const variable = node.arg;
 
     if (variable.subscripts.length === 0) {
         state.valueStack.push("");
@@ -452,13 +448,8 @@ const interpretOrder = (node: BasicBuiltinAstNode, state: InterpreterState): boo
     return true;
 };
 
-const interpretLength = (node: BasicBuiltinAstNode, state: InterpreterState): boolean => {
-    if (node.args.length !== 1) {
-        reportError("Expected one argument to length builtin", node, state);
-        return false;
-    }
-
-    if (!interpretExpression(node.args[0], state)) {
+const interpretLengthBuiltin = (node: LengthBuiltinAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.arg, state)) {
         return false;
     }
 
@@ -468,17 +459,8 @@ const interpretLength = (node: BasicBuiltinAstNode, state: InterpreterState): bo
     return true;
 };
 
-const verifyExtractionArgs = (node: BasicBuiltinAstNode, state: InterpreterState): boolean => {
-    if (node.args.length < 1 || node.args.length > 3) {
-        reportError("Expected between one and three arguments for extract builtin", node, state);
-        return false;
-    }
-
-    return true;
-};
-
 const getExtractionStart = (
-    node: BasicBuiltinAstNode,
+    node: ExtractBuiltinAstNode,
     state: InterpreterState,
 ): number | undefined => {
     if (node.args.length >= 2) {
@@ -493,7 +475,7 @@ const getExtractionStart = (
 };
 
 const getExtractionEnd = (
-    node: BasicBuiltinAstNode,
+    node: ExtractBuiltinAstNode,
     state: InterpreterState,
     start: number,
 ): number | undefined => {
@@ -508,11 +490,7 @@ const getExtractionEnd = (
     return start + 1;
 };
 
-const interpretExtract = (node: BasicBuiltinAstNode, state: InterpreterState): boolean => {
-    if (!verifyExtractionArgs(node, state)) {
-        return false;
-    }
-
+const interpretExtractBuiltin = (node: ExtractBuiltinAstNode, state: InterpreterState): boolean => {
     if (!interpretExpression(node.args[0], state)) {
         return false;
     }
@@ -556,17 +534,6 @@ const interpretSelectBuiltin = (node: SelectBuiltinAstNode, state: InterpreterSt
     return false;
 };
 
-const interpretBasicBuiltin = (node: BasicBuiltinAstNode, state: InterpreterState): boolean => {
-    switch (node.builtinKind) {
-        case BasicBuiltinKind.Order:
-            return interpretOrder(node, state);
-        case BasicBuiltinKind.Length:
-            return interpretLength(node, state);
-        case BasicBuiltinKind.Extract:
-            return interpretExtract(node, state);
-    }
-};
-
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
@@ -588,8 +555,12 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             return interpretUnaryOp(node, state);
         case AstNodeKind.BinaryOp:
             return interpretBinaryOp(node, state);
-        case AstNodeKind.BasicBuiltin:
-            return interpretBasicBuiltin(node, state);
+        case AstNodeKind.OrderBuiltin:
+            return interpretOrderBuiltin(node, state);
+        case AstNodeKind.LengthBuiltin:
+            return interpretLengthBuiltin(node, state);
+        case AstNodeKind.ExtractBuiltin:
+            return interpretExtractBuiltin(node, state);
         case AstNodeKind.SelectBuiltin:
             return interpretSelectBuiltin(node, state);
     }
@@ -870,13 +841,13 @@ const replaceStringRange = (destination: string, source: string, start: number, 
     return `${before}${source}${after}`;
 };
 
-const interpretSetExtract = (node: BasicBuiltinAstNode, state: InterpreterState, value: string) => {
-    if (!verifyExtractionArgs(node, state)) {
-        return CommandResult.Halt;
-    }
-
+const interpretSetExtract = (
+    node: ExtractBuiltinAstNode,
+    state: InterpreterState,
+    value: string,
+) => {
     if (node.args[0].kind !== AstNodeKind.Variable) {
-        return CommandResult.Halt;
+        return CommandResult.Continue;
     }
 
     const start = getExtractionStart(node, state);
@@ -942,7 +913,7 @@ const interpretVariableSetArgument = (
 
     const value = state.valueStack.pop()!;
 
-    if (node.target.kind === AstNodeKind.BasicBuiltin) {
+    if (node.target.kind === AstNodeKind.ExtractBuiltin) {
         return interpretSetExtract(node.target, state, mValueToString(value));
     }
 
