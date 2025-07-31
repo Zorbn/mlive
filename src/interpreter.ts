@@ -42,6 +42,7 @@ import {
     LengthBuiltinAstNode,
     ExtractBuiltinAstNode,
     FindBuiltinAstNode,
+    RandomBuiltinAstNode,
 } from "./parser.js";
 
 type Environment = Map<string, MValue | MReference>;
@@ -590,6 +591,19 @@ const interpretFindBuiltin = (node: FindBuiltinAstNode, state: InterpreterState)
     return true;
 };
 
+const interpretRandomBuiltin = (node: RandomBuiltinAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.max, state)) {
+        return false;
+    }
+
+    const max = Math.floor(mValueToNumber(state.valueStack.pop()!));
+    const value = Math.floor(Math.random() * (max + 1));
+
+    state.valueStack.push(value);
+
+    return true;
+};
+
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
@@ -621,6 +635,8 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             return interpretSelectBuiltin(node, state);
         case AstNodeKind.FindBuiltin:
             return interpretFindBuiltin(node, state);
+        case AstNodeKind.RandomBuiltin:
+            return interpretRandomBuiltin(node, state);
     }
 
     return true;

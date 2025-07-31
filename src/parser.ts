@@ -36,6 +36,7 @@ export const enum AstNodeKind {
     SelectBuiltin,
     SelectBuiltinArg,
     FindBuiltin,
+    RandomBuiltin,
 }
 
 interface Tag {
@@ -260,12 +261,18 @@ export interface FindBuiltinAstNode extends TextRange {
     findStart?: ExpressionAstNode;
 }
 
+export interface RandomBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.RandomBuiltin;
+    max: ExpressionAstNode;
+}
+
 export type BuiltinAstNode =
     | OrderBuiltinAstNode
     | LengthBuiltinAstNode
     | ExtractBuiltinAstNode
     | SelectBuiltinAstNode
-    | FindBuiltinAstNode;
+    | FindBuiltinAstNode
+    | RandomBuiltinAstNode;
 
 export interface ExclamationFormatter {
     kind: AstNodeKind.ExclamationPointFormatter;
@@ -698,6 +705,32 @@ const parseFindBuiltin = (
     };
 };
 
+const parseRandomBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): RandomBuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseExpression);
+
+    if (!args) {
+        return;
+    }
+
+    if (args.length !== 1) {
+        reportErrorAt("Expected one argument for the random builtin", builtinName, state);
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.RandomBuiltin,
+        max: args[0],
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
 const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | undefined => {
     const builtinName = matchToken(input, state, TokenKind.Identifier);
 
@@ -718,6 +751,8 @@ const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | un
         return parseSelectBuiltin(input, state, builtinName);
     } else if ("find".startsWith(lowerCaseBuiltinName)) {
         return parseFindBuiltin(input, state, builtinName);
+    } else if ("random".startsWith(lowerCaseBuiltinName)) {
+        return parseRandomBuiltin(input, state, builtinName);
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;
