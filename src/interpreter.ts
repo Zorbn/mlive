@@ -41,6 +41,7 @@ import {
     OrderBuiltinAstNode,
     LengthBuiltinAstNode,
     ExtractBuiltinAstNode,
+    FindBuiltinAstNode,
 } from "./parser.js";
 
 type Environment = Map<string, MValue | MReference>;
@@ -463,8 +464,8 @@ const getExtractionStart = (
     node: ExtractBuiltinAstNode,
     state: InterpreterState,
 ): number | undefined => {
-    if (node.args.length >= 2) {
-        if (!interpretExpression(node.args[1], state)) {
+    if (node.extractionStart) {
+        if (!interpretExpression(node.extractionStart, state)) {
             return;
         }
 
@@ -479,8 +480,8 @@ const getExtractionEnd = (
     state: InterpreterState,
     start: number,
 ): number | undefined => {
-    if (node.args.length >= 3) {
-        if (!interpretExpression(node.args[2], state)) {
+    if (node.extractionEnd) {
+        if (!interpretExpression(node.extractionEnd, state)) {
             return;
         }
 
@@ -491,7 +492,7 @@ const getExtractionEnd = (
 };
 
 const interpretExtractBuiltin = (node: ExtractBuiltinAstNode, state: InterpreterState): boolean => {
-    if (!interpretExpression(node.args[0], state)) {
+    if (!interpretExpression(node.target, state)) {
         return false;
     }
 
@@ -534,6 +535,61 @@ const interpretSelectBuiltin = (node: SelectBuiltinAstNode, state: InterpreterSt
     return false;
 };
 
+const interpretFindBuiltin = (node: FindBuiltinAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.haystack, state)) {
+        return false;
+    }
+
+    const haystack = mValueToString(state.valueStack.pop()!);
+
+    if (!interpretExpression(node.needle, state)) {
+        return false;
+    }
+
+    const needle = mValueToString(state.valueStack.pop()!);
+
+    let findStart = 0;
+
+    if (node.findStart) {
+        if (!interpretExpression(node.haystack, state)) {
+            return false;
+        }
+
+        findStart = mValueToNumber(state.valueStack.pop()!);
+        findStart = Math.max(findStart - 1, 0);
+    }
+
+    if (needle === "") {
+        state.valueStack.push(1);
+        return true;
+    }
+
+    let matchProgress = 0;
+
+    for (let i = findStart; i < haystack.length; ) {
+        if (haystack[i] !== needle[matchProgress]) {
+            if (matchProgress > 0) {
+                matchProgress = 0;
+            } else {
+                i++;
+            }
+
+            continue;
+        }
+
+        matchProgress++;
+        i++;
+
+        if (matchProgress >= needle.length) {
+            state.valueStack.push(i + 1);
+            return true;
+        }
+    }
+
+    state.valueStack.push(0);
+    return true;
+};
+
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
@@ -563,6 +619,8 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             return interpretExtractBuiltin(node, state);
         case AstNodeKind.SelectBuiltin:
             return interpretSelectBuiltin(node, state);
+        case AstNodeKind.FindBuiltin:
+            return interpretFindBuiltin(node, state);
     }
 
     return true;
@@ -846,7 +904,7 @@ const interpretSetExtract = (
     state: InterpreterState,
     value: string,
 ) => {
-    if (node.args[0].kind !== AstNodeKind.Variable) {
+    if (node.target.kind !== AstNodeKind.Variable) {
         return CommandResult.Continue;
     }
 
@@ -862,7 +920,7 @@ const interpretSetExtract = (
         return CommandResult.Halt;
     }
 
-    const variable = node.args[0];
+    const variable = node.target;
 
     if (variable.kind !== AstNodeKind.Variable) {
         return CommandResult.Continue;

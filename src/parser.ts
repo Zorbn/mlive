@@ -35,6 +35,7 @@ export const enum AstNodeKind {
     ExtractBuiltin,
     SelectBuiltin,
     SelectBuiltinArg,
+    FindBuiltin,
 }
 
 interface Tag {
@@ -236,7 +237,9 @@ export interface LengthBuiltinAstNode extends TextRange {
 
 export interface ExtractBuiltinAstNode extends TextRange {
     kind: AstNodeKind.ExtractBuiltin;
-    args: ExpressionAstNode[];
+    target: ExpressionAstNode;
+    extractionStart: ExpressionAstNode;
+    extractionEnd: ExpressionAstNode;
 }
 
 export interface SelectBuiltinArgAstNode extends TextRange {
@@ -250,11 +253,19 @@ export interface SelectBuiltinAstNode extends TextRange {
     args: SelectBuiltinArgAstNode[];
 }
 
+export interface FindBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.FindBuiltin;
+    haystack: ExpressionAstNode;
+    needle: ExpressionAstNode;
+    findStart?: ExpressionAstNode;
+}
+
 export type BuiltinAstNode =
     | OrderBuiltinAstNode
     | LengthBuiltinAstNode
     | ExtractBuiltinAstNode
-    | SelectBuiltinAstNode;
+    | SelectBuiltinAstNode
+    | FindBuiltinAstNode;
 
 export interface ExclamationFormatter {
     kind: AstNodeKind.ExclamationPointFormatter;
@@ -554,7 +565,7 @@ const parseOrderBuiltin = (
     input: Token[][],
     state: ParserState,
     builtinName: Token,
-): BuiltinAstNode | undefined => {
+): OrderBuiltinAstNode | undefined => {
     const args = parseBuiltinArgs(input, state, parseVariable);
 
     if (!args) {
@@ -580,7 +591,7 @@ const parseLengthBuiltin = (
     input: Token[][],
     state: ParserState,
     builtinName: Token,
-): BuiltinAstNode | undefined => {
+): LengthBuiltinAstNode | undefined => {
     const args = parseBuiltinArgs(input, state, parseExpression);
 
     if (!args) {
@@ -606,7 +617,7 @@ const parseExtractBuiltin = (
     input: Token[][],
     state: ParserState,
     builtinName: Token,
-): BuiltinAstNode | undefined => {
+): ExtractBuiltinAstNode | undefined => {
     const args = parseBuiltinArgs(input, state, parseExpression);
 
     if (!args) {
@@ -626,7 +637,9 @@ const parseExtractBuiltin = (
 
     return {
         kind: AstNodeKind.ExtractBuiltin,
-        args,
+        target: args[0],
+        extractionStart: args[1],
+        extractionEnd: args[2],
         start: builtinName.start,
         end: lastToken.start,
     };
@@ -636,7 +649,7 @@ const parseSelectBuiltin = (
     input: Token[][],
     state: ParserState,
     builtinName: Token,
-): BuiltinAstNode | undefined => {
+): SelectBuiltinAstNode | undefined => {
     const args = parseBuiltinArgs(input, state, parseSelectBuiltinArg);
 
     if (!args) {
@@ -648,6 +661,38 @@ const parseSelectBuiltin = (
     return {
         kind: AstNodeKind.SelectBuiltin,
         args,
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
+const parseFindBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): FindBuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, parseExpression);
+
+    if (!args) {
+        return;
+    }
+
+    if (args.length < 2 || args.length > 3) {
+        reportErrorAt(
+            "Expected between two and three arguments for find builtin",
+            builtinName,
+            state,
+        );
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.FindBuiltin,
+        haystack: args[0],
+        needle: args[1],
+        findStart: args[2],
         start: builtinName.start,
         end: lastToken.start,
     };
@@ -671,6 +716,8 @@ const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | un
         return parseExtractBuiltin(input, state, builtinName);
     } else if ("select".startsWith(lowerCaseBuiltinName)) {
         return parseSelectBuiltin(input, state, builtinName);
+    } else if ("find".startsWith(lowerCaseBuiltinName)) {
+        return parseFindBuiltin(input, state, builtinName);
     } else {
         reportErrorAt("Unrecognized builtin", builtinName, state);
         return;

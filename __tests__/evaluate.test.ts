@@ -394,3 +394,12 @@ test("halt", () => {
         `a`,
     );
 });
+
+test("find", () => {
+    assertScript(` w $F("abchibca","hi")`, `6`);
+    assertScript(` w $F("abchibca","hithere")`, `0`);
+    assertScript(` w $F("abchibca","bc")`, `4`);
+    assertScript(` w $F("abchibca","")`, `1`);
+    assertScript(` w $F("","anything")`, `0`);
+    assertScript(` w $F("exact","exact")`, `6`);
+});
