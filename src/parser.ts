@@ -297,6 +297,20 @@ interface ParserPosition {
     nextUnparsedLine: number;
 }
 
+interface CommandBodyVariant {
+    name: string;
+    parser: (input: Token[][], state: ParserState) => CommandBodyAstNode | undefined;
+}
+
+interface BuiltinVariant {
+    name: string;
+    parser: (
+        input: Token[][],
+        state: ParserState,
+        builtinName: Token,
+    ) => BuiltinAstNode | undefined;
+}
+
 interface ParserState {
     position: ParserPosition;
     // The number of dots before each line (in addition to leading whitespace).
@@ -741,22 +755,14 @@ const parseBuiltin = (input: Token[][], state: ParserState): BuiltinAstNode | un
 
     const lowerCaseBuiltinName = builtinName.text.toLowerCase();
 
-    if ("order".startsWith(lowerCaseBuiltinName)) {
-        return parseOrderBuiltin(input, state, builtinName);
-    } else if ("length".startsWith(lowerCaseBuiltinName)) {
-        return parseLengthBuiltin(input, state, builtinName);
-    } else if ("extract".startsWith(lowerCaseBuiltinName)) {
-        return parseExtractBuiltin(input, state, builtinName);
-    } else if ("select".startsWith(lowerCaseBuiltinName)) {
-        return parseSelectBuiltin(input, state, builtinName);
-    } else if ("find".startsWith(lowerCaseBuiltinName)) {
-        return parseFindBuiltin(input, state, builtinName);
-    } else if ("random".startsWith(lowerCaseBuiltinName)) {
-        return parseRandomBuiltin(input, state, builtinName);
-    } else {
-        reportErrorAt("Unrecognized builtin", builtinName, state);
-        return;
+    for (const variant of builtinVariants) {
+        if (variant.name.startsWith(lowerCaseBuiltinName)) {
+            return variant.parser(input, state, builtinName);
+        }
     }
+
+    reportErrorAt("Unrecognized builtin", builtinName, state);
+    return;
 };
 
 const parsePrimary = (input: Token[][], state: ParserState): ExpressionAstNode | undefined => {
@@ -1471,34 +1477,18 @@ const parseCommand = (input: Token[][], state: ParserState): CommandAstNode | un
 
     const lowerCaseName = nameToken.text.toLowerCase();
 
-    // TODO: Turn this into a map lookup to get the function to call. The current way results in lots of string cmps.
-    if ("write".startsWith(lowerCaseName)) {
-        body = parseWrite(input, state);
-    } else if ("quit".startsWith(lowerCaseName)) {
-        body = parseQuit(input, state);
-    } else if ("do".startsWith(lowerCaseName)) {
-        body = parseDo(input, state);
-    } else if ("if".startsWith(lowerCaseName)) {
-        body = parseIf(input, state);
-    } else if ("else".startsWith(lowerCaseName)) {
-        body = parseElse(input, state);
-    } else if ("for".startsWith(lowerCaseName)) {
-        body = parseFor(input, state);
-    } else if ("set".startsWith(lowerCaseName)) {
-        body = parseSet(input, state);
-    } else if ("new".startsWith(lowerCaseName)) {
-        body = parseNew(input, state);
-    } else if ("kill".startsWith(lowerCaseName)) {
-        body = parseKill(input, state);
-    } else if ("merge".startsWith(lowerCaseName)) {
-        body = parseMerge(input, state);
-    } else if ("halt".startsWith(lowerCaseName)) {
-        body = parseHalt(input, state);
-    } else {
-        reportErrorAt("Unrecognized command name", nameToken, state);
+    for (const variant of commandBodyVariants) {
+        if (variant.name.startsWith(lowerCaseName)) {
+            body = variant.parser(input, state);
+
+            if (!body) {
+                return;
+            }
+        }
     }
 
     if (!body) {
+        reportErrorAt("Unrecognized command name", nameToken, state);
         return;
     }
 
@@ -1605,6 +1595,29 @@ const parseTopLevel = (input: Token[][], state: ParserState): TopLevelAstNode | 
 
     return topLevel;
 };
+
+const commandBodyVariants: CommandBodyVariant[] = [
+    { name: "write", parser: parseWrite },
+    { name: "quit", parser: parseQuit },
+    { name: "do", parser: parseDo },
+    { name: "if", parser: parseIf },
+    { name: "else", parser: parseElse },
+    { name: "for", parser: parseFor },
+    { name: "set", parser: parseSet },
+    { name: "new", parser: parseNew },
+    { name: "kill", parser: parseKill },
+    { name: "merge", parser: parseMerge },
+    { name: "halt", parser: parseHalt },
+];
+
+const builtinVariants: BuiltinVariant[] = [
+    { name: "order", parser: parseOrderBuiltin },
+    { name: "length", parser: parseLengthBuiltin },
+    { name: "extract", parser: parseExtractBuiltin },
+    { name: "select", parser: parseSelectBuiltin },
+    { name: "find", parser: parseFindBuiltin },
+    { name: "random", parser: parseRandomBuiltin },
+];
 
 export const parse = (input: Token[][]) => {
     const state = {
