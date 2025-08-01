@@ -126,16 +126,24 @@ const mArrayGetDesiredIndex = (array: MArray, key: string) => {
         return 0;
     }
 
-    // TODO: This could use a binary search because keys are sorted.
-    for (let i = 0; i < array.children.length; i++) {
-        const pair = array.children[i];
+    let left = 0;
+    let right = array.children.length;
 
-        if (key <= pair.key) {
-            return i;
+    while (left < right) {
+        const index = ((left + right) / 2) | 0;
+        const pair = array.children[index];
+
+        if (pair.key > key) {
+            right = index - 1;
+        } else if (pair.key < key) {
+            left = index + 1;
+        } else {
+            left = index;
+            break;
         }
     }
 
-    return array.children.length;
+    return left;
 };
 
 export const mArrayGetNextKey = (array: MArray, key: string) => {
