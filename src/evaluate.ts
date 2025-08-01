@@ -1,8 +1,8 @@
 import { tokenize } from "./tokenizer.js";
-import { interpret } from "./interpreter.js";
+import { Extern, interpret } from "./interpreter.js";
 import { parse } from "./parser.js";
 
-export const evaluate = (script: string) => {
+export const evaluate = (script: string, externs?: Map<string, Extern>) => {
     const tokenizeResult = tokenize(script);
 
     if (tokenizeResult.errors.length > 0) {
@@ -21,5 +21,5 @@ export const evaluate = (script: string) => {
         };
     }
 
-    return interpret(parseResult.ast);
+    return interpret(parseResult.ast, externs);
 };

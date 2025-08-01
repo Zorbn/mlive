@@ -11,14 +11,21 @@
 <body>
     <script src="dist/index.js" type="module" defer></script>
 </body>
-    <div id="container">
+    <div id="verticalContainer">
         <h1>M<span class="condensed">Script</span></h1>
-        <textarea id="inputTextArea" class="shadow" spellcheck="false"></textarea>
-        <div id="buttonContainer">
-            <button id="evaluateButton" class="shadow">Evaluate</button>
-            <button id="clearButton" class="shadow">Clear</button>
-            <button id="copyLinkButton" class="shadow">Copy Link</button>
+        <div id="horizontalContainer">
+            <div id="verticalContainer">
+                <textarea id="inputTextArea" class="shadow rounded" spellcheck="false"></textarea>
+                <div id="buttonContainer">
+                    <button id="evaluateButton" class="shadow rounded">Evaluate</button>
+                    <button id="clearButton" class="shadow rounded">Clear</button>
+                    <button id="copyLinkButton" class="shadow rounded">Copy Link</button>
+                </div>
+                <textarea id="outputTextArea" class="shadow rounded" spellcheck="false" readonly></textarea>
+            </div>
+            <div id="verticalContainer" class="centerVertical">
+                <canvas width="640" height="480" class="shadow rounded"></canvas>
+            </div>
         </div>
-        <textarea id="outputTextArea" class="shadow" spellcheck="false" readonly></textarea>
     </div>
 </html>

@@ -46,9 +46,11 @@ import {
 } from "./parser.js";
 
 type Environment = Map<string, MValue | MReference>;
+export type Extern = (...args: MValue[]) => MScalar | undefined | void;
 
 interface InterpreterState {
     ast: TopLevelAstNode;
+    externs: Map<string, Extern>;
     valueStack: MScalar[];
     environmentStack: Environment[];
     output: string[];
@@ -263,6 +265,40 @@ const interpretVariable = (node: VariableAstNode, state: InterpreterState): bool
     }
 };
 
+const interpretExtern = (
+    node: CallAstNode,
+    state: InterpreterState,
+    extern: Extern,
+    hasReturnValue: boolean,
+): boolean => {
+    const argValues = [];
+
+    for (const arg of node.args) {
+        let value: MValue;
+
+        if (arg.kind === AstNodeKind.Reference) {
+            const reference = getVariableReference(arg.name.text, state);
+            value = getReferenceValue(reference, state) ?? "";
+        } else {
+            if (!interpretExpression(arg, state)) {
+                return false;
+            }
+
+            value = state.valueStack.pop()!;
+        }
+
+        argValues.push(value);
+    }
+
+    const returnValue = extern(...argValues);
+
+    if (hasReturnValue) {
+        state.valueStack.push(returnValue ?? "");
+    }
+
+    return true;
+};
+
 const interpretCall = (
     node: CallAstNode,
     state: InterpreterState,
@@ -270,9 +306,15 @@ const interpretCall = (
 ): boolean => {
     const tag = state.ast.tags.get(node.name.text);
 
-    if (tag === undefined) {
-        reportError(`Tag "${node.name.text}" not found`, node, state);
-        return false;
+    if (!tag) {
+        const extern = state.externs.get(node.name.text);
+
+        if (extern) {
+            return interpretExtern(node, state, extern, hasReturnValue);
+        } else {
+            reportError(`Tag "${node.name.text}" not found`, node, state);
+            return false;
+        }
     }
 
     const callEnvironmentStackLength = state.environmentStack.length;
@@ -1201,9 +1243,10 @@ const interpretTopLevel = (state: InterpreterState, start: number) => {
     }
 };
 
-export const interpret = (ast: TopLevelAstNode) => {
+export const interpret = (ast: TopLevelAstNode, externs: Map<string, Extern> = new Map()) => {
     const state = {
         ast,
+        externs,
         valueStack: [],
         environmentStack: [new Map()],
         output: [],

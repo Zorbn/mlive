@@ -19,14 +19,24 @@ body {
     height: 100%;
 }
 
-#container {
+#verticalContainer {
     display: flex;
     flex-direction: column;
     width: 100%;
-    max-width: 750px;
+    max-width: 1280px;
     gap: 0.25rem;
     padding: 0.25rem;
     overflow: hidden;
+}
+
+.centerVertical {
+    justify-content: center;
+}
+
+#horizontalContainer {
+    display: flex;
+    height: 100%;
+    gap: 0.25rem;
 }
 
 .shadow {
@@ -52,10 +62,31 @@ h1 {
     gap: 0.25rem;
 }
 
+.rounded {
+    border-radius: 3px;
+}
+
+.rounded:not(canvas) {
+    border: 1px solid #d0d0d8;
+}
+
+canvas.rounded {
+    outline: 1px solid #d0d0d8;
+}
+
+button {
+    color: #404088;
+    background-color: #f0f0f8;
+}
+
+button:active {
+    color: black;
+    background-color: #e8e8ef;
+}
+
 textarea {
     resize: none;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
-    border-radius: 3px;
 }

@@ -1,4 +1,6 @@
 import { evaluate } from "./evaluate.js";
+import { Extern } from "./interpreter.js";
+import { MValue, mValueToNumber, mValueToString } from "./mArray.js";
 import { MError } from "./mError.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
@@ -6,6 +8,15 @@ const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonEl
 const clearButton = document.getElementById("clearButton") as HTMLButtonElement;
 const copyLinkButton = document.getElementById("copyLinkButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
+const canvas = document.getElementsByTagName("canvas")[0] as HTMLCanvasElement;
+const ctx = canvas.getContext("2d")!;
+
+const clearCanvas = () => {
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+};
+
+clearCanvas();
 
 if (window.location.search.length > 1) {
     inputTextArea.value = atob(window.location.search.slice(1));
@@ -125,10 +136,30 @@ const handleErrors = (errors: MError[]) => {
     return true;
 };
 
+const externs: Map<string, Extern> = new Map([
+    [
+        "setFillStyle",
+        (style: MValue) => {
+            ctx.fillStyle = mValueToString(style);
+        },
+    ],
+    [
+        "fillRect",
+        (x: MValue, y: MValue, width: MValue, height: MValue) => {
+            ctx.fillRect(
+                mValueToNumber(x),
+                mValueToNumber(y),
+                mValueToNumber(width),
+                mValueToNumber(height),
+            );
+        },
+    ],
+]);
+
 evaluateButton.addEventListener("click", () => {
     const start = performance.now();
 
-    const result = evaluate(inputTextArea.value);
+    const result = evaluate(inputTextArea.value, externs);
 
     const end = performance.now();
 
@@ -140,6 +171,7 @@ evaluateButton.addEventListener("click", () => {
 
 clearButton.addEventListener("click", () => {
     outputTextArea.value = "";
+    clearCanvas();
 });
 
 copyLinkButton.addEventListener("click", () => {
