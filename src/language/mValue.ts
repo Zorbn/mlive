@@ -5,7 +5,8 @@ interface MArrayKeyValuePair {
 
 export const enum MObjectKind {
     Array,
-    Reference,
+    ArrayReference,
+    EnvironmentReference,
 }
 
 export interface MArray {
@@ -14,11 +15,20 @@ export interface MArray {
     children?: MArrayKeyValuePair[];
 }
 
-export interface MReference {
-    kind: MObjectKind.Reference;
-    environmentIndex: number;
+export interface MArrayReference {
+    kind: MObjectKind.ArrayReference;
+    array: MArray;
+    key: string;
+}
+
+export interface MEnvironmentReference {
+    kind: MObjectKind.EnvironmentReference;
+    environment: Environment;
     name: string;
 }
+
+export type MReference = MArrayReference | MEnvironmentReference;
+export type Environment = Map<string, MValue | MReference>;
 
 export type MScalar = string | number;
 export type MValue = MScalar | MArray;

@@ -286,7 +286,7 @@ export type AstNode =
     | TopLevelAstNode
     | CommandBodyAstNode
     | CommandAstNode
-    | ExpressionAstNode
+    | CallArgumentAstNode
     | IdentifierAstNode
     | NumberLiteralAstNode
     | StringLiteralAstNode;
