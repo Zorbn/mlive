@@ -39,7 +39,7 @@ export const enum AstNodeKind {
     RandomBuiltin,
 }
 
-interface Tag {
+export interface Tag {
     index: number;
     params: string[] | null;
 }
@@ -315,6 +315,11 @@ interface ParserState {
     position: ParserPosition;
     // The number of dots before each line (in addition to leading whitespace).
     indentationLevel: number;
+    errors: MError[];
+}
+
+export interface ParserResult {
+    ast: TopLevelAstNode | undefined;
     errors: MError[];
 }
 
@@ -1619,7 +1624,7 @@ const builtinVariants: BuiltinVariant[] = [
     { name: "random", parser: parseRandomBuiltin },
 ];
 
-export const parse = (input: Token[][]) => {
+export const parse = (input: Token[][]): ParserResult => {
     const state = {
         position: makeParserPosition(),
         indentationLevel: 0,

@@ -43,6 +43,7 @@ import {
     ExtractBuiltinAstNode,
     FindBuiltinAstNode,
     RandomBuiltinAstNode,
+    Tag,
 } from "./parser.js";
 
 type Environment = Map<string, MValue | MReference>;
@@ -137,7 +138,7 @@ const getVariable = (
 
     let value = getReferenceValue(reference, state);
 
-    if (!value) {
+    if (value === undefined) {
         return null;
     }
 
@@ -319,9 +320,10 @@ const interpretCall = (
 
     const callEnvironmentStackLength = state.environmentStack.length;
 
-    let didPushEnvironment = false;
-
     if (tag.params) {
+        const environment = new Map();
+        state.environmentStack.push(environment);
+
         for (let i = 0; i < Math.min(tag.params.length, node.args.length); i++) {
             const arg = node.args[i];
             let argValue: MValue | MReference;
@@ -336,16 +338,11 @@ const interpretCall = (
                 argValue = state.valueStack.pop()!;
             }
 
-            if (!didPushEnvironment) {
-                state.environmentStack.push(new Map());
-                didPushEnvironment = true;
-            }
-
-            state.environmentStack[state.environmentStack.length - 1].set(tag.params[i], argValue);
+            environment.set(tag.params[i], argValue);
         }
 
         for (let i = node.args.length; i < tag.params.length; i++) {
-            state.environmentStack[state.environmentStack.length - 1].set(tag.params[i], "");
+            environment.set(tag.params[i], "");
         }
     }
 
@@ -1233,27 +1230,69 @@ const interpretCommand = (node: CommandAstNode, state: InterpreterState): Comman
     }
 };
 
-const interpretTopLevel = (state: InterpreterState, start: number) => {
+const interpretTopLevel = (state: InterpreterState, start: number): CommandResult => {
     for (let i = start; i < state.ast.children.length; i++) {
         const result = interpretCommand(state.ast.children[i], state);
 
         if (result !== CommandResult.Continue) {
-            break;
+            return result;
         }
+    }
+
+    return CommandResult.Continue;
+};
+
+export const makeInterpreterState = (
+    ast: TopLevelAstNode,
+    externs: Map<string, Extern> = new Map(),
+) => ({
+    ast,
+    externs,
+    valueStack: [],
+    environmentStack: [new Map()],
+    output: [],
+    errors: [],
+});
+
+export const interpretTag = (
+    tag: Tag | undefined,
+    args: MValue[],
+    state: InterpreterState,
+): MValue | undefined => {
+    const callEnvironmentStackLength = state.environmentStack.length;
+
+    if (tag?.params) {
+        const environment = new Map();
+        state.environmentStack.push(environment);
+
+        for (let i = 0; i < Math.min(tag.params.length, args.length); i++) {
+            environment.set(tag.params[i], args[i]);
+        }
+
+        for (let i = args.length; i < tag.params.length; i++) {
+            environment.set(tag.params[i], "");
+        }
+    }
+
+    const callValueStackLength = state.valueStack.length;
+
+    if (interpretTopLevel(state, tag?.index ?? 0) === CommandResult.Halt) {
+        return;
+    }
+
+    state.environmentStack.length = callEnvironmentStackLength;
+
+    if (state.valueStack.length === callValueStackLength) {
+        return "";
+    } else {
+        return state.valueStack.pop();
     }
 };
 
 export const interpret = (ast: TopLevelAstNode, externs: Map<string, Extern> = new Map()) => {
-    const state = {
-        ast,
-        externs,
-        valueStack: [],
-        environmentStack: [new Map()],
-        output: [],
-        errors: [],
-    };
+    const state = makeInterpreterState(ast, externs);
 
-    interpretTopLevel(state, ast.tags.get("main")?.index ?? 0);
+    interpretTag(ast.tags.get("main"), [], state);
 
     return {
         output: state.output.join(""),

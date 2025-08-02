@@ -2,17 +2,21 @@ import { tokenize } from "./tokenizer.js";
 import { Extern, interpret } from "./interpreter.js";
 import { parse } from "./parser.js";
 
-export const evaluate = (script: string, externs?: Map<string, Extern>) => {
+export const parseScript = (script: string) => {
     const tokenizeResult = tokenize(script);
 
     if (tokenizeResult.errors.length > 0) {
         return {
-            output: "",
+            ast: undefined,
             errors: tokenizeResult.errors,
         };
     }
 
-    const parseResult = parse(tokenizeResult.tokenizedLines);
+    return parse(tokenizeResult.tokenizedLines);
+};
+
+export const evaluate = (script: string, externs?: Map<string, Extern>) => {
+    const parseResult = parseScript(script);
 
     if (parseResult.errors.length > 0 || !parseResult.ast) {
         return {

@@ -1,10 +1,10 @@
-import { evaluate } from "./evaluate.js";
-import { Extern } from "./interpreter.js";
+import { parseScript } from "./evaluate.js";
+import { Extern, interpretTag, makeInterpreterState } from "./interpreter.js";
 import { MValue, mValueToNumber, mValueToString } from "./mArray.js";
 import { MError } from "./mError.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
-const evaluateButton = document.getElementById("evaluateButton") as HTMLButtonElement;
+const runButton = document.getElementById("runButton") as HTMLButtonElement;
 const clearButton = document.getElementById("clearButton") as HTMLButtonElement;
 const copyLinkButton = document.getElementById("copyLinkButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
@@ -129,7 +129,7 @@ const handleErrors = (errors: MError[]) => {
         return false;
     }
 
-    outputTextArea.value = errors
+    outputTextArea.value += errors
         .map((error) => `Error at ${error.line + 1}:${error.column + 1}: ${error.message}`)
         .join("\n");
 
@@ -156,21 +156,100 @@ const externs: Map<string, Extern> = new Map([
     ],
 ]);
 
-evaluateButton.addEventListener("click", () => {
-    const start = performance.now();
+let isRunning = false;
+let output = "";
 
-    const result = evaluate(inputTextArea.value, externs);
+const setIsRunning = (value: boolean) => {
+    isRunning = value;
 
-    const end = performance.now();
+    if (isRunning) {
+        runButton.textContent = "End";
+    } else {
+        runButton.textContent = "Run";
+    }
+};
 
-    if (!handleErrors(result.errors)) {
-        console.log(`Evaluation completed successfully in ${end - start}ms!`);
-        outputTextArea.value = result.output;
+const pushOutput = (values: string[]) => {
+    output += values.join("");
+    outputTextArea.value = output;
+    outputTextArea.scrollTop = outputTextArea.scrollHeight;
+};
+
+const clearOutput = () => {
+    output = "";
+    outputTextArea.value = output;
+};
+
+runButton.addEventListener("click", () => {
+    if (!isRunning) {
+        evaluate();
+    } else {
+        setIsRunning(false);
     }
 });
 
+const evaluate = () => {
+    clearOutput();
+    clearCanvas();
+
+    const start = performance.now();
+
+    const parseResult = parseScript(inputTextArea.value);
+
+    if (handleErrors(parseResult.errors)) {
+        return;
+    }
+
+    const ast = parseResult.ast!;
+    const state = makeInterpreterState(ast, externs);
+
+    let didHalt = interpretTag(ast.tags.get("main"), [], state) === undefined;
+
+    if (handleErrors(state.errors) || didHalt) {
+        return;
+    }
+
+    pushOutput(state.output);
+
+    const frameTag = ast.tags.get("frame");
+
+    if (!frameTag) {
+        const end = performance.now();
+        console.log(`Evaluation completed successfully in ${end - start}ms!`);
+
+        return;
+    }
+
+    let lastTime: number;
+
+    const onFrame = (time: number) => {
+        if (!isRunning) {
+            return;
+        }
+
+        lastTime ??= time;
+        const delta = time - lastTime;
+        lastTime = time;
+
+        state.output.length = 0;
+        didHalt = interpretTag(frameTag, [delta], state) === undefined;
+
+        if (handleErrors(state.errors) || didHalt) {
+            isRunning = false;
+            return;
+        }
+
+        pushOutput(state.output);
+        requestAnimationFrame(onFrame);
+    };
+
+    setIsRunning(true);
+    requestAnimationFrame(onFrame);
+};
+
 clearButton.addEventListener("click", () => {
-    outputTextArea.value = "";
+    setIsRunning(false);
+    clearOutput();
     clearCanvas();
 });
 
