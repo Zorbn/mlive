@@ -7,7 +7,6 @@ import { addCodeEditingListeners } from "./textArea.js";
 
 // TODO:
 // Actually use the end field of AST nodes for error reporting
-// Implement ** (power) operator and possibly <=, >=
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const runButton = document.getElementById("runButton") as HTMLButtonElement;

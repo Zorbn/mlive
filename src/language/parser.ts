@@ -212,6 +212,7 @@ export const enum BinaryOp {
     Add,
     Subtract,
     Multiply,
+    Power,
     Divide,
     IntegerDivide,
     Modulo,
@@ -908,6 +909,9 @@ const parseExpression = (input: Token[][], state: ParserState): ExpressionAstNod
                     break;
                 case TokenKind.Asterisk:
                     op = BinaryOp.Multiply;
+                    break;
+                case TokenKind.DoubleAsterisk:
+                    op = BinaryOp.Power;
                     break;
                 case TokenKind.ForwardSlash:
                     op = BinaryOp.Divide;

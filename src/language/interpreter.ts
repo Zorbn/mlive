@@ -417,6 +417,9 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
         case BinaryOp.Multiply:
             value = mValueToNumber(left) * mValueToNumber(right);
             break;
+        case BinaryOp.Power:
+            value = Math.pow(mValueToNumber(left), mValueToNumber(right));
+            break;
         case BinaryOp.Divide:
             value = mValueToNumber(left) / mValueToNumber(right);
             break;

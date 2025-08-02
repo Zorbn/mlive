@@ -45,6 +45,11 @@ test("modulo", () => {
     assertScript(` w -5#2`, `-1`);
 });
 
+test("power", () => {
+    assertScript(` w 2**3`, `8`);
+    assertScript(` w 4**0`, `1`);
+});
+
 test("left to right precedence", () => {
     assertScript(` w 3+4*3`, `21`);
     assertScript(` w 3+(4*3)`, `15`);
