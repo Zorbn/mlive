@@ -159,6 +159,12 @@ const externs: Map<string, Extern> = new Map([
     ],
     ["isKeyHeld", (key: MValue) => (input.heldKeys.has(mValueToString(key)) ? 1 : 0)],
     ["isKeyPressed", (key: MValue) => (input.pressedKeys.has(mValueToString(key)) ? 1 : 0)],
+    ["sin", (x: MValue) => Math.sin(mValueToNumber(x))],
+    ["cos", (x: MValue) => Math.cos(mValueToNumber(x))],
+    ["floor", (x: MValue) => Math.floor(mValueToNumber(x))],
+    ["ceil", (x: MValue) => Math.ceil(mValueToNumber(x))],
+    ["min", (x: MValue) => Math.min(mValueToNumber(x))],
+    ["max", (x: MValue) => Math.max(mValueToNumber(x))],
 ]);
 
 let isRunning = false;
