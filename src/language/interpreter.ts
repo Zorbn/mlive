@@ -12,7 +12,7 @@ import {
     MObjectKind,
     mArrayKill,
     mValueCopy,
-} from "./mArray.js";
+} from "./mValue.js";
 import { MError } from "./mError.js";
 import {
     AstNode,

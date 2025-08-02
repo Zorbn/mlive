@@ -29,7 +29,6 @@ export const mValueToNumber = (value: MValue): number => {
     }
 
     if (typeof value === "string") {
-        // TODO: Implement accurate conversion.
         const number = parseFloat(value);
 
         return isNaN(number) ? 0 : number;

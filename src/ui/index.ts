@@ -1,15 +1,18 @@
-import { parseScript } from "./evaluate.js";
-import { Extern, interpretTag, makeInterpreterState } from "./interpreter.js";
-import { MValue, mValueToNumber, mValueToString } from "./mArray.js";
-import { MError } from "./mError.js";
+import { parseScript } from "../language/evaluate.js";
+import { Extern, interpretTag, makeInterpreterState } from "../language/interpreter.js";
+import { MValue, mValueToNumber, mValueToString } from "../language/mValue.js";
+import { MError } from "../language/mError.js";
+import { clearFrameInput, makeInput } from "./input.js";
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const runButton = document.getElementById("runButton") as HTMLButtonElement;
 const clearButton = document.getElementById("clearButton") as HTMLButtonElement;
 const copyLinkButton = document.getElementById("copyLinkButton") as HTMLButtonElement;
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
+
 const canvas = document.getElementsByTagName("canvas")[0] as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
+const input = makeInput(canvas);
 
 const clearCanvas = () => {
     ctx.fillStyle = "white";
@@ -154,6 +157,8 @@ const externs: Map<string, Extern> = new Map([
             );
         },
     ],
+    ["isKeyHeld", (key: MValue) => (input.heldKeys.has(mValueToString(key)) ? 1 : 0)],
+    ["isKeyPressed", (key: MValue) => (input.pressedKeys.has(mValueToString(key)) ? 1 : 0)],
 ]);
 
 let isRunning = false;
@@ -203,6 +208,7 @@ const evaluate = () => {
     const ast = parseResult.ast!;
     const state = makeInterpreterState(ast, externs);
 
+    clearFrameInput(input);
     let didHalt = interpretTag(ast.tags.get("main"), [], state) === undefined;
 
     if (handleErrors(state.errors) || didHalt) {
@@ -228,10 +234,11 @@ const evaluate = () => {
         }
 
         lastTime ??= time;
-        const delta = time - lastTime;
+        const delta = (time - lastTime) * 0.001;
         lastTime = time;
 
         state.output.length = 0;
+        clearFrameInput(input);
         didHalt = interpretTag(frameTag, [delta], state) === undefined;
 
         if (handleErrors(state.errors) || didHalt) {

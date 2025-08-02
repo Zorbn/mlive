@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert";
-import { evaluate } from "../src/evaluate.js";
-import { MError } from "../src/mError.js";
+import { evaluate } from "../src/language/evaluate.js";
+import { MError } from "../src/language/mError.js";
 
 const assertScript = (script: string, output: string, errors?: MError[]) => {
     assert.deepStrictEqual(evaluate(script), {
