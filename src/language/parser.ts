@@ -29,6 +29,7 @@ export const enum AstNodeKind {
     BinaryOp,
     UnaryOp,
     ExclamationPointFormatter,
+    QuestionMarkFormatter,
     HashFormatter,
     OrderBuiltin,
     LengthBuiltin,
@@ -59,7 +60,24 @@ export interface WriteAstNode extends TextRange {
     args: WriteArgumentAstNode[];
 }
 
-export type WriteArgumentAstNode = ExpressionAstNode | ExclamationFormatter | HashFormatter;
+export interface ExclamationPointFormatter {
+    kind: AstNodeKind.ExclamationPointFormatter;
+}
+
+export interface QuestionMarkFormatter {
+    kind: AstNodeKind.QuestionMarkFormatter;
+    minColumn: ExpressionAstNode;
+}
+
+export interface HashFormatter {
+    kind: AstNodeKind.HashFormatter;
+}
+
+export type WriteArgumentAstNode =
+    | ExpressionAstNode
+    | ExclamationPointFormatter
+    | QuestionMarkFormatter
+    | HashFormatter;
 
 export interface QuitAstNode extends TextRange {
     kind: AstNodeKind.Quit;
@@ -274,14 +292,6 @@ export type BuiltinAstNode =
     | SelectBuiltinAstNode
     | FindBuiltinAstNode
     | RandomBuiltinAstNode;
-
-export interface ExclamationFormatter {
-    kind: AstNodeKind.ExclamationPointFormatter;
-}
-
-export interface HashFormatter {
-    kind: AstNodeKind.HashFormatter;
-}
 
 export type AstNode =
     | TopLevelAstNode
@@ -1009,9 +1019,9 @@ const parseBlock = (
 
 const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefined => {
     const firstToken = getToken(input, state);
-
-    // TODO: Support formatting with ?.
     const args: WriteArgumentAstNode[] = [];
+
+    let isInFormat = false;
 
     while (!matchWhitespace(input, state)) {
         const token = getToken(input, state);
@@ -1020,26 +1030,43 @@ const parseWrite = (input: Token[][], state: ParserState): WriteAstNode | undefi
             case TokenKind.Hash:
                 nextToken(input, state);
                 args.push({ kind: AstNodeKind.HashFormatter });
-                break;
+                isInFormat = true;
+                continue;
             case TokenKind.ExclamationPoint:
                 nextToken(input, state);
                 args.push({ kind: AstNodeKind.ExclamationPointFormatter });
-                break;
-            default: {
+                isInFormat = true;
+                continue;
+            case TokenKind.QuestionMark: {
+                nextToken(input, state);
+
                 const expression = parseExpression(input, state);
 
                 if (!expression) {
                     return;
                 }
 
-                args.push(expression);
-                break;
+                args.push({ kind: AstNodeKind.QuestionMarkFormatter, minColumn: expression });
+                isInFormat = true;
+                continue;
             }
+        }
+
+        if (!isInFormat) {
+            const expression = parseExpression(input, state);
+
+            if (!expression) {
+                return;
+            }
+
+            args.push(expression);
         }
 
         if (!matchToken(input, state, TokenKind.Comma)) {
             break;
         }
+
+        isInFormat = false;
     }
 
     const lastToken = getToken(input, state);

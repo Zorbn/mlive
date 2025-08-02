@@ -55,6 +55,7 @@ interface InterpreterState {
     externs: Map<string, Extern>;
     valueStack: MScalar[];
     environmentStack: Environment[];
+    outputColumn: number;
     output: string[];
     errors: MError[];
 }
@@ -673,23 +674,41 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
 };
 
 const interpretWrite = (node: WriteAstNode, state: InterpreterState): CommandResult => {
-    // TODO: Support formatting with ?.
-
     for (const arg of node.args) {
         switch (arg.kind) {
             case AstNodeKind.HashFormatter:
                 state.output.length = 0;
+                state.outputColumn = 0;
                 break;
             case AstNodeKind.ExclamationPointFormatter:
                 state.output.push("\n");
+                state.outputColumn = 0;
                 break;
-            default:
+            case AstNodeKind.QuestionMarkFormatter: {
+                if (!interpretExpression(arg.minColumn, state)) {
+                    return CommandResult.Halt;
+                }
+
+                const minColumn = Math.floor(mValueToNumber(state.valueStack.pop()!));
+
+                if (state.outputColumn < minColumn) {
+                    state.output.push(" ".repeat(minColumn - state.outputColumn));
+                    state.outputColumn = minColumn;
+                }
+
+                break;
+            }
+            default: {
                 if (!interpretExpression(arg, state)) {
                     return CommandResult.Halt;
                 }
 
-                state.output.push(state.valueStack.pop()!.toString());
+                const value = state.valueStack.pop()!.toString();
+
+                state.output.push(value);
+                state.outputColumn += value.length;
                 break;
+            }
         }
     }
 
@@ -1226,6 +1245,7 @@ export const makeInterpreterState = (
     externs,
     valueStack: [],
     environmentStack: [new Map()],
+    outputColumn: 0,
     output: [],
     errors: [],
 });

@@ -96,6 +96,40 @@ Hello, world`,
     );
 });
 
+test("write formatting", () => {
+    assertScript(` w "Hi"`, `Hi`);
+
+    assertScript(
+        ` w !,"Hi"`,
+        `
+Hi`,
+    );
+
+    assertScript(
+        ` w !!,"Hi"`,
+        `
+
+Hi`,
+    );
+
+    assertScript(` w "Hi",#`, ``);
+
+    assertScript(
+        ` w !,"Hi",?0,"Hi",!?6,"Hello"`,
+        `
+HiHi
+      Hello`,
+    );
+
+    assertScript(` w !"Hi"`, ``, [
+        {
+            line: 0,
+            column: 4,
+            message: "Expected space between arguments and next commands",
+        },
+    ]);
+});
+
 test("if statements", () => {
     assertScript(
         `
