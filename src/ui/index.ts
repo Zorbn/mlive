@@ -170,7 +170,7 @@ clearButton.addEventListener("click", () => {
 copyLinkButton.addEventListener("click", () => {
     const encodedScript = btoa(inputTextArea.value);
     navigator.clipboard.writeText(
-        `${window.location.origin}${window.location.pathname}/?${encodedScript}`,
+        `${window.location.origin}${window.location.pathname}?${encodedScript}`,
     );
 });
 
