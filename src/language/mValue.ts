@@ -143,7 +143,7 @@ const mArrayGetDesiredIndex = (array: MArray, key: string) => {
         const pair = array.children[index];
 
         if (pair.key > key) {
-            right = index - 1;
+            right = index;
         } else if (pair.key < key) {
             left = index + 1;
         } else {

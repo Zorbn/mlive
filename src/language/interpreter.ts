@@ -896,8 +896,8 @@ const interpretForWithStartIncrementEnd = (
         const variableValue = mValueToNumber(state.valueStack.pop()!);
 
         if (
-            (incrementValue < 0 && variableValue < startValue) ||
-            (incrementValue > 0 && variableValue > endValue)
+            (incrementValue < 0 && variableValue < endValue) ||
+            (incrementValue >= 0 && variableValue > endValue)
         ) {
             return CommandResult.Continue;
         }

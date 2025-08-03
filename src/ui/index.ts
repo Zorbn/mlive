@@ -7,6 +7,8 @@ import { addCodeEditingListeners } from "./textArea.js";
 
 // TODO:
 // Actually use the end field of AST nodes for error reporting
+// Support passing order a direction parameter
+// Scale canvas based on device pixel ratio
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const runButton = document.getElementById("runButton") as HTMLButtonElement;
@@ -19,22 +21,24 @@ const ctx = canvas.getContext("2d")!;
 const input = makeInput(canvas);
 
 const externs: Map<string, Extern> = new Map([
-    [
-        "setFillStyle",
-        (style: MValue) => {
-            ctx.fillStyle = mValueToString(style);
-        },
-    ],
+    ["getCanvasWidth", () => canvas.width],
+    ["getCanvasHeight", () => canvas.height],
+    ["setFillStyle", (style: MValue) => (ctx.fillStyle = mValueToString(style))],
+    ["setFont", (font: MValue) => (ctx.font = mValueToString(font))],
     [
         "fillRect",
-        (x: MValue, y: MValue, width: MValue, height: MValue) => {
+        (x: MValue, y: MValue, width: MValue, height: MValue) =>
             ctx.fillRect(
                 mValueToNumber(x),
                 mValueToNumber(y),
                 mValueToNumber(width),
                 mValueToNumber(height),
-            );
-        },
+            ),
+    ],
+    [
+        "fillText",
+        (text: MValue, x: MValue, y: MValue) =>
+            ctx.fillText(mValueToString(text), mValueToNumber(x), mValueToNumber(y)),
     ],
     ["isKeyHeld", (key: MValue) => (input.heldKeys.has(mValueToString(key)) ? 1 : 0)],
     ["isKeyPressed", (key: MValue) => (input.pressedKeys.has(mValueToString(key)) ? 1 : 0)],
@@ -42,8 +46,8 @@ const externs: Map<string, Extern> = new Map([
     ["cos", (x: MValue) => Math.cos(mValueToNumber(x))],
     ["floor", (x: MValue) => Math.floor(mValueToNumber(x))],
     ["ceil", (x: MValue) => Math.ceil(mValueToNumber(x))],
-    ["min", (x: MValue) => Math.min(mValueToNumber(x))],
-    ["max", (x: MValue) => Math.max(mValueToNumber(x))],
+    ["min", (x: MValue, y: MValue) => Math.min(mValueToNumber(x), mValueToNumber(y))],
+    ["max", (x: MValue, y: MValue) => Math.max(mValueToNumber(x), mValueToNumber(y))],
 ]);
 
 let isRunning = false;
@@ -102,14 +106,13 @@ const evaluate = () => {
     const ast = parseResult.ast!;
     const state = makeInterpreterState(ast, externs);
 
-    clearFrameInput(input);
     let didHalt = interpretTag(ast.tags.get("main"), [], state) === undefined;
+    pushOutput(state.output);
+    clearFrameInput(input);
 
     if (handleErrors(state.errors) || didHalt) {
         return;
     }
-
-    pushOutput(state.output);
 
     const frameTag = ast.tags.get("frame");
 
@@ -132,15 +135,15 @@ const evaluate = () => {
         lastTime = time;
 
         state.output.length = 0;
-        clearFrameInput(input);
         didHalt = interpretTag(frameTag, [delta], state) === undefined;
+        pushOutput(state.output);
+        clearFrameInput(input);
 
         if (handleErrors(state.errors) || didHalt) {
-            isRunning = false;
+            setIsRunning(false);
             return;
         }
 
-        pushOutput(state.output);
         requestAnimationFrame(onFrame);
     };
 
@@ -180,7 +183,8 @@ if (window.location.search.length > 1) {
     q
 
 sayHello
-    w "Hello, world!",!`;
+    w "Hello, world!",!
+    q`;
 }
 
 clearCanvas();

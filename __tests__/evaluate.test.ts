@@ -285,6 +285,15 @@ test("length", () => {
     );
 });
 
+test("add to array out of order", () => {
+    assertScript(
+        `
+    s arr(1)="a",arr(3)="c",arr(2)="b"
+    w arr(1),arr(2),arr(3)`,
+        `abc`,
+    );
+});
+
 test("merge", () => {
     assertScript(
         `
