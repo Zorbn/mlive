@@ -8,7 +8,6 @@ import { addCodeEditingListeners } from "./textArea.js";
 // TODO:
 // Actually use the end field of AST nodes for error reporting
 // Support passing order a direction parameter
-// Scale canvas based on device pixel ratio
 
 const inputTextArea = document.getElementById("inputTextArea") as HTMLTextAreaElement;
 const runButton = document.getElementById("runButton") as HTMLButtonElement;
@@ -17,12 +16,14 @@ const copyLinkButton = document.getElementById("copyLinkButton") as HTMLButtonEl
 const outputTextArea = document.getElementById("outputTextArea") as HTMLTextAreaElement;
 
 const canvas = document.getElementsByTagName("canvas")[0] as HTMLCanvasElement;
+const canvasWidth = canvas.width;
+const canvasHeight = canvas.height;
 const ctx = canvas.getContext("2d")!;
 const input = makeInput(canvas);
 
 const externs: Map<string, Extern> = new Map([
-    ["getCanvasWidth", () => canvas.width],
-    ["getCanvasHeight", () => canvas.height],
+    ["getCanvasWidth", () => canvasWidth],
+    ["getCanvasHeight", () => canvasHeight],
     ["setFillStyle", (style: MValue) => (ctx.fillStyle = mValueToString(style))],
     ["setFont", (font: MValue) => (ctx.font = mValueToString(font))],
     [
@@ -55,7 +56,7 @@ let output = "";
 
 const clearCanvas = () => {
     ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 };
 
 const handleErrors = (errors: MError[]) => {
@@ -186,5 +187,9 @@ sayHello
     w "Hello, world!",!
     q`;
 }
+
+canvas.width *= window.devicePixelRatio;
+canvas.height *= window.devicePixelRatio;
+ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
 clearCanvas();
