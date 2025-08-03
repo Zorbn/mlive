@@ -47,6 +47,8 @@ import {
     RandomBuiltinAstNode,
     Tag,
     CallArgumentAstNode,
+    AsciiBuiltinAstNode,
+    CharBuiltinAstNode,
 } from "./parser.js";
 
 export type Extern = (...args: MValue[]) => MScalar | undefined | void;
@@ -661,6 +663,29 @@ const interpretRandomBuiltin = (node: RandomBuiltinAstNode, state: InterpreterSt
     return true;
 };
 
+const interpretAsciiBuiltin = (node: AsciiBuiltinAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.value, state)) {
+        return false;
+    }
+
+    const string = mValueToString(state.valueStack.pop()!);
+    const value = string.length > 0 ? string.charCodeAt(0) : -1;
+    state.valueStack.push(value);
+
+    return true;
+};
+
+const interpretCharBuiltin = (node: CharBuiltinAstNode, state: InterpreterState): boolean => {
+    if (!interpretExpression(node.value, state)) {
+        return false;
+    }
+
+    const value = mValueToNumber(state.valueStack.pop()!);
+    state.valueStack.push(String.fromCharCode(value));
+
+    return true;
+};
+
 const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): boolean => {
     switch (node.kind) {
         case AstNodeKind.Variable: {
@@ -694,6 +719,10 @@ const interpretExpression = (node: ExpressionAstNode, state: InterpreterState): 
             return interpretFindBuiltin(node, state);
         case AstNodeKind.RandomBuiltin:
             return interpretRandomBuiltin(node, state);
+        case AstNodeKind.AsciiBuiltin:
+            return interpretAsciiBuiltin(node, state);
+        case AstNodeKind.CharBuiltin:
+            return interpretCharBuiltin(node, state);
     }
 
     return true;

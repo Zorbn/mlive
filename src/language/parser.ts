@@ -38,6 +38,8 @@ export const enum AstNodeKind {
     SelectBuiltinArg,
     FindBuiltin,
     RandomBuiltin,
+    AsciiBuiltin,
+    CharBuiltin,
 }
 
 export interface Tag {
@@ -286,13 +288,25 @@ export interface RandomBuiltinAstNode extends TextRange {
     max: ExpressionAstNode;
 }
 
+export interface AsciiBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.AsciiBuiltin;
+    value: ExpressionAstNode;
+}
+
+export interface CharBuiltinAstNode extends TextRange {
+    kind: AstNodeKind.CharBuiltin;
+    value: ExpressionAstNode;
+}
+
 export type BuiltinAstNode =
     | OrderBuiltinAstNode
     | LengthBuiltinAstNode
     | ExtractBuiltinAstNode
     | SelectBuiltinAstNode
     | FindBuiltinAstNode
-    | RandomBuiltinAstNode;
+    | RandomBuiltinAstNode
+    | AsciiBuiltinAstNode
+    | CharBuiltinAstNode;
 
 export type AstNode =
     | TopLevelAstNode
@@ -548,7 +562,10 @@ const parseVariable = (input: Token[][], state: ParserState): VariableAstNode | 
 const parseBuiltinArgs = <T>(
     input: Token[][],
     state: ParserState,
+    builtinName: Token,
     parser: (input: Token[][], state: ParserState) => T | undefined,
+    minArgCount?: number,
+    maxArgCount?: number,
 ): T[] | undefined => {
     if (!matchToken(input, state, TokenKind.LeftParen)) {
         reportError("Expected argument list after builtin name", input, state);
@@ -564,6 +581,14 @@ const parseBuiltinArgs = <T>(
     if (!matchToken(input, state, TokenKind.RightParen)) {
         reportError("Unterminated argument list", input, state);
         return;
+    }
+
+    if (minArgCount !== undefined && args.length < minArgCount) {
+        reportErrorAt(`Builtin expects at least ${minArgCount} arguments`, builtinName, state);
+    }
+
+    if (maxArgCount !== undefined && args.length > maxArgCount) {
+        reportErrorAt(`Builtin expects at most ${maxArgCount} arguments`, builtinName, state);
     }
 
     return args;
@@ -604,18 +629,9 @@ const parseOrderBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): OrderBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseExpression);
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 2);
 
     if (!args) {
-        return;
-    }
-
-    if (args.length < 1 || args.length > 2) {
-        reportErrorAt(
-            "Expected between one and two arguments for the order builtin",
-            builtinName,
-            state,
-        );
         return;
     }
 
@@ -644,14 +660,9 @@ const parseLengthBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): LengthBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseExpression);
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 1);
 
     if (!args) {
-        return;
-    }
-
-    if (args.length !== 1) {
-        reportErrorAt("Expected one argument for the length builtin", builtinName, state);
         return;
     }
 
@@ -670,18 +681,9 @@ const parseExtractBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): ExtractBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseExpression);
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 3);
 
     if (!args) {
-        return;
-    }
-
-    if (args.length < 1 || args.length > 3) {
-        reportErrorAt(
-            "Expected between one and three arguments for extract builtin",
-            builtinName,
-            state,
-        );
         return;
     }
 
@@ -702,7 +704,7 @@ const parseSelectBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): SelectBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseSelectBuiltinArg);
+    const args = parseBuiltinArgs(input, state, builtinName, parseSelectBuiltinArg);
 
     if (!args) {
         return;
@@ -723,18 +725,9 @@ const parseFindBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): FindBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseExpression);
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 2, 3);
 
     if (!args) {
-        return;
-    }
-
-    if (args.length < 2 || args.length > 3) {
-        reportErrorAt(
-            "Expected between two and three arguments for find builtin",
-            builtinName,
-            state,
-        );
         return;
     }
 
@@ -755,14 +748,9 @@ const parseRandomBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): RandomBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseExpression);
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 1);
 
     if (!args) {
-        return;
-    }
-
-    if (args.length !== 1) {
-        reportErrorAt("Expected one argument for the random builtin", builtinName, state);
         return;
     }
 
@@ -771,6 +759,48 @@ const parseRandomBuiltin = (
     return {
         kind: AstNodeKind.RandomBuiltin,
         max: args[0],
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
+const parseAsciiBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): AsciiBuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 1);
+
+    if (!args) {
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.AsciiBuiltin,
+        value: args[0],
+        start: builtinName.start,
+        end: lastToken.start,
+    };
+};
+
+const parseCharBuiltin = (
+    input: Token[][],
+    state: ParserState,
+    builtinName: Token,
+): CharBuiltinAstNode | undefined => {
+    const args = parseBuiltinArgs(input, state, builtinName, parseExpression, 1, 1);
+
+    if (!args) {
+        return;
+    }
+
+    const lastToken = getToken(input, state);
+
+    return {
+        kind: AstNodeKind.CharBuiltin,
+        value: args[0],
         start: builtinName.start,
         end: lastToken.start,
     };
@@ -1668,6 +1698,8 @@ const builtinVariants: BuiltinVariant[] = [
     { name: "select", parser: parseSelectBuiltin },
     { name: "find", parser: parseFindBuiltin },
     { name: "random", parser: parseRandomBuiltin },
+    { name: "ascii", parser: parseAsciiBuiltin },
+    { name: "char", parser: parseCharBuiltin },
 ];
 
 export const parse = (input: Token[][]): ParserResult => {

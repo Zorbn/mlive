@@ -488,3 +488,16 @@ a`,
         ],
     );
 });
+
+test("ascii", () => {
+    assertScript(` f i=97:1:99 w $C(i)`, `abc`);
+});
+
+test("char", () => {
+    assertScript(
+        ` w $C(10)_"a",!,"b"`,
+        `
+a
+b`,
+    );
+});
