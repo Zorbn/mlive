@@ -247,7 +247,8 @@ export interface BinaryOpAstNode extends TextRange {
 
 export interface OrderBuiltinAstNode extends TextRange {
     kind: AstNodeKind.OrderBuiltin;
-    arg: VariableAstNode;
+    variable: VariableAstNode;
+    direction: ExpressionAstNode;
 }
 
 export interface LengthBuiltinAstNode extends TextRange {
@@ -603,14 +604,27 @@ const parseOrderBuiltin = (
     state: ParserState,
     builtinName: Token,
 ): OrderBuiltinAstNode | undefined => {
-    const args = parseBuiltinArgs(input, state, parseVariable);
+    const args = parseBuiltinArgs(input, state, parseExpression);
 
     if (!args) {
         return;
     }
 
-    if (args.length !== 1) {
-        reportErrorAt("Expected one argument for the order builtin", builtinName, state);
+    if (args.length < 1 || args.length > 2) {
+        reportErrorAt(
+            "Expected between one and two arguments for the order builtin",
+            builtinName,
+            state,
+        );
+        return;
+    }
+
+    if (args[0].kind !== AstNodeKind.Variable) {
+        reportErrorAt(
+            "Expected the first argument for the order builtin to be a variable",
+            builtinName,
+            state,
+        );
         return;
     }
 
@@ -618,7 +632,8 @@ const parseOrderBuiltin = (
 
     return {
         kind: AstNodeKind.OrderBuiltin,
-        arg: args[0],
+        variable: args[0],
+        direction: args[1],
         start: builtinName.start,
         end: lastToken.start,
     };

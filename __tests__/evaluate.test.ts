@@ -451,3 +451,40 @@ test("find", () => {
     assertScript(` w $F("","anything")`, `0`);
     assertScript(` w $F("exact","exact")`, `6`);
 });
+
+test("order", () => {
+    assertScript(
+        `
+    s arr(1)="a",arr(2)="c",arr(10)="b"
+    s key=""
+    f  s key=$O(arr(key)) q:key=""  w !,arr(key)
+    f  s key=$O(arr(key),1) q:key=""  w !,arr(key)
+    s key=""
+    f  s key=$O(arr(key),-1) q:key=""  w !,arr(key)`,
+        `
+a
+b
+c
+a
+b
+c
+c
+b
+a`,
+    );
+
+    assertScript(
+        `
+    s arr(1)="a",arr(2)="c",arr(10)="b"
+    s key=""
+    f  s key=$O(arr(key),-2) q:key=""  w !,arr(key)`,
+        ``,
+        [
+            {
+                line: 3,
+                column: 25,
+                message: "Expected 1 or -1 for order builtin's direction argument",
+            },
+        ],
+    );
+});

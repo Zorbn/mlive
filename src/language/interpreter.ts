@@ -13,6 +13,7 @@ import {
     mArrayKill,
     mValueCopy,
     Environment,
+    mArrayGetPreviousKey,
 } from "./mValue.js";
 import { MError } from "./mError.js";
 import {
@@ -448,7 +449,26 @@ const interpretBinaryOp = (node: BinaryOpAstNode, state: InterpreterState): bool
 };
 
 const interpretOrderBuiltin = (node: OrderBuiltinAstNode, state: InterpreterState): boolean => {
-    const variable = node.arg;
+    let direction = 1;
+
+    if (node.direction) {
+        if (!interpretExpression(node.direction, state)) {
+            return false;
+        }
+
+        direction = mValueToNumber(state.valueStack.pop()!);
+
+        if (direction !== 1 && direction !== -1) {
+            reportError(
+                "Expected 1 or -1 for order builtin's direction argument",
+                node.direction,
+                state,
+            );
+            return false;
+        }
+    }
+
+    const variable = node.variable;
 
     if (variable.subscripts.length === 0) {
         state.valueStack.push("");
@@ -475,7 +495,13 @@ const interpretOrderBuiltin = (node: OrderBuiltinAstNode, state: InterpreterStat
         return true;
     }
 
-    const nextKey = mArrayGetNextKey(value, finalSubscriptKey);
+    let nextKey;
+
+    if (direction < 0) {
+        nextKey = mArrayGetPreviousKey(value, finalSubscriptKey);
+    } else {
+        nextKey = mArrayGetNextKey(value, finalSubscriptKey);
+    }
 
     state.valueStack.push(nextKey);
     return true;

@@ -155,6 +155,22 @@ const mArrayGetDesiredIndex = (array: MArray, key: string) => {
     return left;
 };
 
+export const mArrayGetPreviousKey = (array: MArray, key: string) => {
+    if (!array.children) {
+        return "";
+    }
+
+    let index;
+
+    if (key === "") {
+        index = Math.max(array.children.length - 1, 0);
+    } else {
+        index = mArrayGetDesiredIndex(array, key) - 1;
+    }
+
+    return array.children[index]?.key ?? "";
+};
+
 export const mArrayGetNextKey = (array: MArray, key: string) => {
     let index = mArrayGetDesiredIndex(array, key);
 
