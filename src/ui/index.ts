@@ -155,6 +155,7 @@ addCodeEditingListeners(inputTextArea);
 
 runButton.addEventListener("click", () => {
     if (!isRunning) {
+        canvas.focus();
         evaluate();
     } else {
         setIsRunning(false);
